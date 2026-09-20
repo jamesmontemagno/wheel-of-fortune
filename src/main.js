@@ -71,7 +71,7 @@ function wheelMarkup(preview = false) {
 
 function header() {
   return `<header class="site-header">
-    <a class="brand" href="./" aria-label="Wheel of Fortune home"><span class="brand-mark" aria-hidden="true">✳</span><span>WHEEL <span class="brand-of">of</span><br>FORTUNE<span class="brand-dot">.</span></span></a>
+    <a class="brand" href="./" aria-label="Wheel of Wisdom home"><span class="brand-mark" aria-hidden="true">✳</span><span>WHEEL <span class="brand-of">of</span><br>WISDOM<span class="brand-dot">.</span></span></a>
     <div class="header-actions">
       ${game ? `<button class="icon-button" id="new-game" aria-label="End game and return home" ${spinning ? 'disabled' : ''}>${icon('home')}</button>` : '<span class="header-note">A good time, all around.</span>'}
       <button class="icon-button" id="sound-toggle" aria-label="Turn sound ${sound ? 'off' : 'on'}" aria-pressed="${sound}">${icon(sound ? 'sound' : 'mute')}</button>
@@ -131,7 +131,7 @@ function renderLobby() {
     </section>
   </section>
   <section class="how-strip" aria-label="The basics">
-    <div><span class="step-number">01</span><span><strong>Spin for your fortune</strong><small>Big prizes. A few plot twists.</small></span></div>
+    <div><span class="step-number">01</span><span><strong>Spin for your wisdom</strong><small>Big prizes. A few plot twists.</small></span></div>
     <div><span class="step-number">02</span><span><strong>Find the missing letters</strong><small>Trust your gut. Or buy a vowel.</small></span></div>
     <div><span class="step-number">03</span><span><strong>Make your winning guess</strong><small>Solve it. Bank it. Celebrate it.</small></span></div>
   </section>`)
@@ -206,7 +206,7 @@ function playingControls() {
   return `<section class="wheel-panel" aria-label="Spin and actions">
     <div class="wheel-panel-heading"><span class="card-eyebrow">A LITTLE LUCK GOES A LONG WAY</span><span aria-hidden="true">✧</span></div>
     ${wheelMarkup()}
-    <div class="wheel-result">${spinning ? 'Round and round we go…' : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your fortune is one spin away.'}</div>
+    <div class="wheel-result">${spinning ? 'Round and round we go…' : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
     <p class="wheel-note">${game.round === 3 ? 'DOUBLE STAKES · All cash wedges pay 2×' : 'Watch out for Bankrupt & Lose a Turn.'}</p>
@@ -234,7 +234,7 @@ function finalMarkup() {
 function renderGame() {
   const bonus = ['bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   shell(`<section class="game-shell">
-    <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra fortune.' : `Round ${game.round}<span class="round-of"> / 3</span>${game.round === 3 ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of 3`}">${[1, 2, 3].map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
+    <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / 3</span>${game.round === 3 ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of 3`}">${[1, 2, 3].map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
     ${playerMarkup()}
     <div class="turn-message" role="status" aria-live="polite"><span class="status-spark" aria-hidden="true">✳</span><span>${spinning ? 'A little suspense is part of the fun. Hold tight…' : escape(game.message)}</span></div>
     <div class="play-layout">

@@ -1,4 +1,4 @@
-# Wheel of Fortune
+# Wheel of Wisdom
 
 A portrait-first, pass-and-play word game for **2–3 players sharing one phone**. An independent fan-made game with original puzzles, no accounts, no backend, and no real-money prizes.
 

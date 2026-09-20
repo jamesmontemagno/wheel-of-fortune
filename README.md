@@ -33,21 +33,25 @@ Enable it once per repository: **Settings → Pages → Build and deployment →
 ## How to play
 
 - Enter player names, choose two or three players, and pass the device on each turn.
+- A bold banner plus a **30-second turn clock** shows whose turn it is. Run out of time and play passes on; winnings are untouched. The clock pauses while the wheel spins or a dialog is open, and restarts after every successful action.
 - Spin the animated wheel, then choose a consonant. Each match earns the wheel value. Wrong guesses pass the turn.
+- Each round uses a bigger wheel with richer cash: 12 spaces in round one, 14 in round two, and 16 in round three.
+- **Trip** wedges appear from round two. Land on one to reveal a surprise trip, claim it with a matching consonant, then solve that round to bank its value. Bankrupt or losing the round loses held trips.
 - Buy a vowel for $250 from your current round winnings before spinning. Vowels do not earn money; a missing vowel still costs $250 and passes the turn.
-- **Bankrupt** clears only current round winnings. **Lose a Turn** preserves them. Both pass play to the next person.
-- Solve the whole puzzle to bank your round winnings, with a $1,000 minimum. Only the solver banks money. Case, spacing, and punctuation do not matter; wrong solutions pass the turn.
+- **Bankrupt** clears only current round winnings and held trips. **Lose a Turn** preserves them. Both pass play to the next person.
+- Solve the whole puzzle to bank your round winnings, with a $1,000 minimum, plus any trips you claimed. Only the solver banks money. Case, spacing, and punctuation do not matter; wrong solutions pass the turn.
 - Play three rounds with rotating starting players and double cash values in round three.
-- The player with the most banked money gets a **$25,000 bonus round**. Ties are settled with a random draw.
+- The player with the most banked money gets the bonus round. Ties are settled with a random draw.
+- The champion spins a **mystery wheel** of six sealed envelopes worth $25,000 to $100,000. The prize stays hidden until the puzzle is solved.
 - The bonus puzzle starts with R, S, T, L, N, E revealed. Pick three more consonants and one vowel, then solve within 20 seconds with one attempt. The clock continues if you switch apps or open help.
 
-Categories and puzzles are selected randomly, with no repeated puzzles within a game. The wheel has equally likely segments. Sound is optional, reduced-motion preferences are respected, and a physical keyboard can be used to select letters.
+Categories, puzzles, trip surprises, and the mystery envelope are selected randomly, with no repeated puzzles within a game. Every wheel segment is equally likely. Sound is optional, reduced-motion preferences are respected, and a physical keyboard can be used to select letters.
 
 Games live in memory: reloading or returning home clears the current game. Players use a **single shared device**, not separate online sessions. Gameplay needs no network after loading; the optional web fonts fall back to system fonts if unavailable.
 
 ## Project layout
 
-- `src/main.js` — screen rendering, accessible dialogs, wheel animation, sound, and bonus timer.
+- `src/main.js` — screen rendering, accessible dialogs, wheel animation, sound, and the turn and bonus timers.
 - `src/style.css` — responsive portrait and desktop layouts.
 - `src/game.js` — game rules, scoring, turns, and random selection.
 - `src/puzzles.js` — original categorized puzzle bank.

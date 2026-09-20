@@ -121,6 +121,30 @@ h1, h2, h3, .brand { font-family: 'Outfit', sans-serif; }
 .player-score > strong { display: inline-block; font-family: 'Outfit', sans-serif; font-size: 26px; font-weight: 550; margin-top: 6px; }
 .banked-label { font-size: 8px; letter-spacing: .7px; color: #7e8574; float: right; margin-top: 22px; }
 .banked-label b { font-size: 10px; letter-spacing: 0; color: #637459; font-weight: 600; margin-left: 4px; }
+.trip-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 9px; font-size: 7px; letter-spacing: .5px; font-weight: 700; color: #1f5674; background: #dcecf5; border-radius: 4px; padding: 3px 5px; }
+.trip-tag svg { width: 10px; height: 10px; }
+.turn-banner { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 13px 18px; border-radius: 12px; border: 1px solid var(--player-color); background: linear-gradient(90deg, var(--player-bg), #fffef8 70%); position: relative; overflow: hidden; }
+.turn-banner-pulse { width: 11px; height: 11px; border-radius: 50%; background: var(--player-color); flex-shrink: 0; animation: turn-pulse 1.9s ease-out infinite; }
+.turn-banner-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.turn-banner-name small { font-size: 7px; letter-spacing: 1.4px; font-weight: 700; color: #7c8470; }
+.turn-banner-name strong { font-family: 'Outfit', sans-serif; font-size: 23px; font-weight: 600; letter-spacing: -.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: turn-rise .45s ease-out; }
+.turn-clock { display: flex; align-items: center; gap: 5px; margin-left: auto; font-family: 'Outfit', sans-serif; font-size: 22px; font-variant-numeric: tabular-nums; color: #3d5a45; }
+.turn-clock svg { width: 17px; height: 17px; }
+.turn-clock small { font: 700 7px 'DM Sans', sans-serif; letter-spacing: 1px; color: #7c8470; }
+.turn-clock.urgent { color: #bd412e; animation: turn-pulse 1s ease-in-out infinite; }
+.turn-clock.urgent small { color: #bd412e; }
+@keyframes turn-pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes turn-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.trip-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; }
+.trip-list > div { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 10px; background: #e9f2f7; border: 1px solid #c8dfeb; font-size: 11px; }
+.trip-list svg { width: 18px; height: 18px; color: #2c6a8c; flex-shrink: 0; }
+.trip-list span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.trip-list small { font-size: 9px; color: #6c7c86; }
+.trip-list b { margin-left: auto; white-space: nowrap; font-family: 'Outfit', sans-serif; font-size: 15px; }
+.mystery-prize { display: flex; flex-direction: column; align-items: center; gap: 9px; font-size: 20px; }
+.mystery-prize svg { width: 46px; height: 46px; color: #a37d27; }
+.mystery-prize.unlocked svg { color: #2f7a4e; }
+.mystery-prize.sealed svg { color: #8d8f7c; }
 .turn-message { display: flex; gap: 9px; align-items: center; min-height: 53px; padding: 12px 0; color: #606f58; font-size: 12px; line-height: 1.5; }
 .status-spark { font-size: 23px; color: #ac784c; flex-shrink: 0; }
 .play-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -307,6 +331,9 @@ dialog .fair-play-note { padding-top: 14px; border-top: 1px solid #e3e5d5; font-
   .player-score { padding: 9px; }
   .score-name { font-size: 9px; }
   .player-score > strong { font-size: 21px; }
+  .turn-banner { padding: 10px 12px; gap: 9px; }
+  .turn-banner-name strong { font-size: 18px; }
+  .turn-clock { font-size: 18px; }
   .wheel-panel { grid-template-columns: 112px minmax(0, 1fr); padding: 13px; column-gap: 14px; }
   .wheel-panel .wheel-wrap { width: 112px; }
   .letter-key { width: calc((100vw - 67px) / 10); }

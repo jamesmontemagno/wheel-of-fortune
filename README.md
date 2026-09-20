@@ -21,6 +21,13 @@ npm run preview  # Preview the production build
 
 Deploy `dist/` to any static host. Relative asset paths support hosting under a subdirectory, including GitHub Pages.
 
+## CI/CD
+
+- `.github/workflows/ci.yml` runs `npm test` and `npm run build` on pull requests and non-`main` branch pushes.
+- `.github/workflows/deploy.yml` tests, builds, and publishes `dist/` to GitHub Pages on every push to `main` (and on demand via *Run workflow*).
+
+Enable it once per repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
 ## How to play
 
 - Enter player names, choose two or three players, and pass the device on each turn.

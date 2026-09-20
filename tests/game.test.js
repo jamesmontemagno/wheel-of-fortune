@@ -72,7 +72,7 @@ test('round wheels grow each round, keep hazards, and add trip surprises', () =>
     if (round > 1) assert.ok(wheel.length > wheelForRound(round - 1).length);
     assert.equal(wheel.filter((s) => s.type === 'lose-turn').length, 1);
     assert.ok([1, 2].includes(wheel.filter((s) => s.type === 'bankrupt').length));
-    assert.equal(wheel.filter((s) => s.type === 'trip').length, round - 1 > 2 ? 2 : Math.max(round - 1, 0));
+    assert.equal(wheel.filter((s) => s.type === 'trip').length, Math.min(round - 1, 2));
     const cash = wheel.filter((s) => s.type === 'cash').map((s) => s.value);
     assert.ok(Math.max(...cash) > (round === 1 ? 0 : Math.max(...wheelForRound(round - 1).filter((s) => s.type === 'cash').map((s) => s.value))));
     for (const segment of wheel) {

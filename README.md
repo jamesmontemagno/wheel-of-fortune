@@ -1,5 +1,7 @@
 # Wheel of Wisdom
 
+play the game https://jamesmontemagno.github.io/wheel-of-wisdom/
+
 A portrait-first, pass-and-play word game for **2–3 players sharing one phone**. An independent fan-made game with original puzzles, no accounts, no backend, and no real-money prizes.
 
 ## Run locally

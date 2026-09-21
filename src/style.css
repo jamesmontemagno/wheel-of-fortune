@@ -342,6 +342,51 @@ dialog .fair-play-note { padding-top: 14px; border-top: 1px solid #e3e5d5; font-
   .category { font-size: 10px; }
 }
 
+.lobby-tabs { display: flex; gap: 8px; padding-top: 20px; }
+.lobby-tabs button { display: flex; align-items: center; gap: 7px; padding: 10px 18px; border-radius: 25px; background: transparent; font-size: 12px; border: 1px solid var(--line); }
+.lobby-tabs button.selected { background: var(--ink); color: #fffdf4; border-color: var(--ink); }
+.lobby-tabs svg { width: 17px; height: 17px; }
+.storage-notice:empty { display: none; }
+.storage-notice { margin-top: 16px; padding: 12px; border-radius: 8px; background: #f5e4c6; color: #704d21; font-size: 12px; }
+.history-page { padding: 35px 0; }
+.history-page h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 550; margin: 10px 0; }
+.history-note { font-size: 12px; color: var(--muted); line-height: 1.7; }
+.history-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 24px; margin: 24px 0; align-items: start; }
+.history-card { padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: #fffef8; min-width: 0; }
+.history-card h2 { display: flex; gap: 10px; align-items: center; font-size: 24px; font-weight: 550; margin-bottom: 10px; }
+.leaderboard, .history-games { list-style: none; padding: 0; margin: 20px 0 0; }
+.leaderboard li { display: flex; gap: 10px; align-items: center; padding: 15px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.leaderboard li > b { margin-left: auto; white-space: nowrap; }
+.history-player { min-width: 0; overflow-wrap: anywhere; }
+.history-player small { display: block; margin-top: 4px; font-size: 10px; color: var(--muted); }
+.history-games li { border-top: 1px solid var(--line); padding: 20px 0; }
+.history-games time { color: var(--muted); font-size: 10px; }
+.history-games h3 { margin-top: 8px; font-size: 19px; font-weight: 500; overflow-wrap: anywhere; }
+.history-games .final-rankings { margin: 10px 0; }
+.history-games .final-rankings > div > span { min-width: 0; overflow-wrap: anywhere; }
+.history-empty { margin: 25px 0; padding: 45px 24px; text-align: center; }
+.history-empty > svg { width: 45px; height: 45px; color: #a37d27; margin-bottom: 15px; }
+.history-empty h2 { justify-content: center; }
+.history-empty p { color: var(--muted); font-size: 13px; }
+.envelope-reveal { position: relative; margin: 30px auto 10px; padding: 24px 10px 40px; perspective: 600px; isolation: isolate; }
+.envelope-flap { position: absolute; inset: auto 0 0; height: 115px; background: #dfc18a; clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: top; animation: envelope-open .8s ease-in-out forwards; z-index: 3; }
+.envelope-front { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(150deg, #f0dbab, #e5c793); border: 1px solid #d2b77b; border-radius: 0 0 12px 12px; color: #a37d27; display: grid; place-items: center; font-size: 30px; z-index: 2; }
+.envelope-prize { position: relative; padding: 22px 12px 36px; border: 1px solid #d8d8c1; border-radius: 10px; background: #fffef8; animation: prize-rise 1.4s ease-out both; }
+.prize-symbol { display: block; font-size: 40px; margin-bottom: 12px; }
+.envelope-prize h3 { font-size: 23px; font-weight: 550; margin: 9px 0; overflow-wrap: anywhere; }
+.envelope-prize > strong { font: 550 32px 'Outfit', sans-serif; }
+.envelope-prize p { margin-top: 8px; }
+.bonus-win .envelope-prize { border-color: #98b478; background: #f5faeb; }
+.bonus-loss .envelope-prize { background: #f8f5ec; }
+.prize-sparkles { position: absolute; top: -10px; left: 0; width: 100%; font-size: 26px; color: #a37d27; letter-spacing: 10px; animation: prize-sparkle 1.8s ease-out both; }
+@keyframes envelope-open { from { transform: rotateX(0deg); } to { transform: rotateX(180deg); z-index: -1; } }
+@keyframes prize-rise { 0%, 25% { opacity: 0; transform: translateY(65px) scale(.9); } 100% { opacity: 1; transform: none; } }
+@keyframes prize-sparkle { 0%, 40% { opacity: 0; transform: scale(.7); } 70% { opacity: 1; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+@media (max-width: 650px) {
+  .history-layout { grid-template-columns: minmax(0, 1fr); }
+  .history-card { padding: 20px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

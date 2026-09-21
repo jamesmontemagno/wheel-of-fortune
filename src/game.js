@@ -69,6 +69,14 @@ export function wheelForRound(round) {
   return ROUND_WHEELS[index];
 }
 
+export function wheelForGame(game) {
+  return wheelForRound(game.round).map((segment, index) => (
+    segment.type === 'trip' && game.claimedTripIndices.includes(index)
+      ? { label: segment.value.toLocaleString('en-US'), type: 'cash', value: segment.value }
+      : segment
+  ));
+}
+
 // Landing on a trip wedge reveals one of these surprises; solve the round to keep it.
 export const TRIP_PRIZES = Object.freeze(
   [
@@ -83,15 +91,15 @@ export const TRIP_PRIZES = Object.freeze(
   ].map(Object.freeze),
 );
 
-// The bonus wheel hides these behind identical envelopes until the puzzle is solved.
+// The bonus wheel hides these behind identical envelopes until the round ends.
 export const BONUS_PRIZES = Object.freeze(
   [
-    { id: 'classic', label: 'The Classic Envelope', value: 25000 },
-    { id: 'golden', label: 'The Golden Envelope', value: 40000 },
-    { id: 'roadster', label: 'A Shiny Little Roadster', value: 50000 },
-    { id: 'world', label: 'A Trip Around the World', value: 75000 },
-    { id: 'jackpot', label: 'The Wisdom Jackpot', value: 100000 },
-    { id: 'homestead', label: 'A Cozy Cabin Homestead', value: 60000 },
+    { id: 'classic', label: 'The Classic Cash Envelope', note: '$25,000 in cash for your next big idea.', type: 'cash', value: 25000 },
+    { id: 'golden', label: 'The Golden Cash Envelope', note: '$40,000 in cash to brighten your future.', type: 'cash', value: 40000 },
+    { id: 'roadster', label: 'A Shiny Little Roadster', note: 'A new convertible for open-road adventures.', type: 'car', value: 50000 },
+    { id: 'world', label: 'A Trip Around the World', note: 'A globe-spanning getaway with flights and stays included.', type: 'trip', value: 75000 },
+    { id: 'jackpot', label: 'The Wisdom Cash Jackpot', note: '$100,000 in cash: the ultimate wisdom reward.', type: 'cash', value: 100000 },
+    { id: 'homestead', label: 'A Cozy Cabin Homestead', note: 'Your own little cabin home, not just a holiday stay.', type: 'home', value: 60000 },
   ].map(Object.freeze),
 );
 
@@ -190,11 +198,14 @@ export function createGame(names, rng = Math.random) {
     usedPuzzleIds: [puzzle.id],
     lastSpin: null,
     pendingTrip: null,
+    claimedTripIndices: [],
     roundPrizes: [],
     turnSerial: 1,
     turnSeconds: TURN_SECONDS,
     bonusSeconds: BONUS_SECONDS,
     bonusPrizeLabel: null,
+    bonusPrizeNote: null,
+    bonusPrizeType: null,
     bonusPrizeRevealed: false,
     bonusSpin: null,
     tieBreak: false,
@@ -204,7 +215,7 @@ export function createGame(names, rng = Math.random) {
 export function spinWheel(game, rng = Math.random) {
   requireMainAction(game);
   requireCondition(game.action === 'spin', 'Choose a consonant before spinning again.');
-  const wheel = wheelForRound(game.round);
+  const wheel = wheelForGame(game);
   const index = randomIndex(wheel.length, rng);
   const segment = wheel[index];
   game.lastSpin = { index, ...segment };
@@ -264,7 +275,10 @@ export function guessLetter(game, letter) {
   game.pendingTrip = null;
   if (occurrences > 0) {
     const claimed = trip && !vowel;
-    if (claimed) player.trips.push({ ...trip });
+    if (claimed) {
+      player.trips.push({ ...trip });
+      game.claimedTripIndices.push(game.lastSpin.index);
+    }
     startClock(game);
     game.message = `${choice} appears ${occurrences} time${occurrences === 1 ? '' : 's'}!${claimed ? ` The ${trip.label} is yours if you solve this round.` : ''} Spin, buy a vowel, or solve.`;
   } else {
@@ -320,10 +334,16 @@ export function nextRound(game, rng = Math.random) {
   game.lastSpin = null;
   game.roundWinner = null;
   game.roundPrizes = [];
+  game.claimedTripIndices = [];
   startClock(game);
   if (game.round < 3) {
     game.round += 1;
-    game.activePlayer = (game.round - 1) % game.players.length;
+    const lowest = Math.min(...game.players.map((player) => player.total));
+    const rotationStart = (game.round - 1) % game.players.length;
+    game.activePlayer = Array.from(
+      { length: game.players.length },
+      (_, offset) => (rotationStart + offset) % game.players.length,
+    ).find((index) => game.players[index].total === lowest);
     game.phase = 'playing';
     game.message = `Round ${game.round}${game.round === 3 ? ': double wheel values' : ''}! A bigger wheel with ${wheelForRound(game.round).length} spaces is in play. ${game.players[game.activePlayer].name}, you start.`;
   } else {
@@ -334,6 +354,8 @@ export function nextRound(game, rng = Math.random) {
     game.bonusLetters = [];
     game.bonusWon = null;
     game.bonusPrizeLabel = null;
+    game.bonusPrizeNote = null;
+    game.bonusPrizeType = null;
     game.bonusPrizeRevealed = false;
     game.bonusSpin = null;
     game.message = `${tied ? 'Tie-break: a random draw selected the champion. ' : ''}${game.players[champion].name} plays the bonus round! Spin the mystery wheel to lock in a hidden prize.`;
@@ -348,9 +370,11 @@ export function spinBonusWheel(game, rng = Math.random) {
   game.bonusSpin = { index, slot: BONUS_WHEEL[index].slot };
   game.bonusPrize = prize.value;
   game.bonusPrizeLabel = prize.label;
+  game.bonusPrizeNote = prize.note;
+  game.bonusPrizeType = prize.type;
   game.bonusPrizeRevealed = false;
   game.phase = 'bonus-pick';
-  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until you solve it. R S T L N E are given. Choose three consonants and one vowel.`;
+  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until the bonus round ends. R S T L N E are given. Choose three consonants and one vowel.`;
   return game;
 }
 
@@ -379,12 +403,12 @@ export function solveBonus(game, answer) {
   requireCondition(game.phase === 'bonus-solve', 'The bonus puzzle is not ready to solve.');
   const normalized = parseAnswer(answer);
   game.bonusWon = normalized === normalizeAnswer(game.puzzle.phrase);
+  game.bonusPrizeRevealed = true;
   if (game.bonusWon) {
     game.players[game.champion].total += game.bonusPrize;
-    game.bonusPrizeRevealed = true;
     game.message = `${game.players[game.champion].name} unlocks ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}!`;
   } else {
-    game.message = 'Not quite! The mystery prize stays sealed, but your banked winnings are safe. Thanks for playing!';
+    game.message = `Not quite! The envelope held ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}. It was not won, but your banked winnings are safe. Thanks for playing!`;
   }
   game.phase = 'game-over';
   return game;
@@ -393,8 +417,9 @@ export function solveBonus(game, answer) {
 export function expireBonus(game) {
   requireCondition(game.phase === 'bonus-solve', 'There is no active bonus timer.');
   game.bonusWon = false;
+  game.bonusPrizeRevealed = true;
   game.phase = 'game-over';
-  game.message = 'Time is up! The mystery prize stays sealed, but your banked winnings are safe. Thanks for playing!';
+  game.message = `Time is up! The envelope held ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}. It was not won, but your banked winnings are safe. Thanks for playing!`;
   return game;
 }
 

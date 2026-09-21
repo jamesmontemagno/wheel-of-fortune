@@ -192,7 +192,7 @@ function renderLobby() {
     event.preventDefault()
     readNames()
     game = createGame(names.slice(0, playerCount).map((name, i) => name.trim() || `Player ${i + 1}`))
-    gameId = crypto.randomUUID()
+    gameId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
     gameRecorded = false
     tone(660)
     renderGame()
@@ -218,6 +218,8 @@ function savePlayers() {
 }
 
 function renderHistory() {
+  history = [...new Map([...history, ...storage.loadHistory()].map((entry) => [entry.id, entry])).values()]
+    .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
   const scores = leaderboard(history)
   shell(`<section class="history-page" aria-labelledby="history-title">
     <span class="card-eyebrow">THE GAME-NIGHT HALL OF FAME</span>

@@ -4,7 +4,12 @@ import { createStorage, recordGame, leaderboard } from '../src/storage.js'
 
 function memoryStorage() {
   const values = new Map()
-  return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
+  return {
+    get length() { return values.size },
+    key: (index) => [...values.keys()][index] ?? null,
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  }
 }
 
 const finishedGame = () => ({
@@ -27,11 +32,11 @@ test('player names and party size survive a new storage instance', () => {
 test('blocked, corrupt, and malformed storage gracefully falls back', () => {
   const blocked = createStorage(() => { throw new Error('Storage blocked') })
   assert.equal(blocked.savePlayers(2, ['', '', '']), false)
-  assert.equal(blocked.saveHistory([]), false)
+  assert.equal(blocked.saveHistory(recordGame([], finishedGame(), 'blocked')), false)
   assert.deepEqual(blocked.loadHistory(), [])
   assert.equal(blocked.loadPlayers().count, 2)
   for (const value of ['{broken', 'null', '{}', '{"count":3,"names":[null]}', '[{"players":null}]']) {
-    const storage = createStorage(() => ({ getItem: () => value }))
+    const storage = createStorage(() => ({ length: 1, key: () => 'wheel-of-wisdom.history.v1.bad', getItem: () => value }))
     assert.deepEqual(storage.loadHistory(), [])
     assert.equal(storage.loadPlayers().count, 2)
   }
@@ -39,15 +44,15 @@ test('blocked, corrupt, and malformed storage gracefully falls back', () => {
 
 test('completed games persist snapshots exactly once, including a lost bonus', () => {
   const game = finishedGame()
-  const history = recordGame([], game, 'one')
+  const history = recordGame([], game, 'one', '2026-09-20T12:00:00Z')
   assert.equal(recordGame(history, game, 'one'), history)
   game.players[0].total = 0
   assert.equal(history[0].players[0].total, 51000)
   assert.equal(recordGame(history, { ...game, phase: 'playing' }, 'two'), history)
   const lost = { ...finishedGame(), bonusWon: false, players: [{ name: 'Ada', total: 1000 }, { name: 'Grace', total: 0 }] }
   const both = recordGame(history, lost, 'two')
-  const storage = createStorage(() => local)
   const local = memoryStorage()
+  const storage = createStorage(() => local)
   assert.equal(storage.saveHistory(both), true)
   assert.deepEqual(storage.loadHistory(), both)
   assert.equal(both[0].players[0].total, 1000)
@@ -57,8 +62,22 @@ test('history validation rejects invalid scores and champions without losing val
   const [entry] = recordGame([], finishedGame(), 'one')
   const values = [entry, { ...entry, champion: 9 }, { ...entry, finishedAt: 'bad' },
     { ...entry, players: [{ name: 'Ada', total: -1 }, { name: 'Grace', total: 0 }] }]
-  const storage = createStorage(() => ({ getItem: () => JSON.stringify(values) }))
+  const local = memoryStorage()
+  values.forEach((entry, index) => local.setItem(`wheel-of-wisdom.history.v1.${index}`, JSON.stringify(entry)))
+  const storage = createStorage(() => local)
   assert.deepEqual(storage.loadHistory(), [entry])
+})
+
+test('games saved from stale tabs never overwrite each other', () => {
+  const local = memoryStorage()
+  const firstTab = createStorage(() => local)
+  const secondTab = createStorage(() => local)
+  const firstHistory = firstTab.loadHistory()
+  const secondHistory = secondTab.loadHistory()
+  firstTab.saveHistory(recordGame(firstHistory, finishedGame(), 'one', '2026-09-20T12:00:00Z'))
+  secondTab.saveHistory(recordGame(secondHistory, finishedGame(), 'two', '2026-09-21T12:00:00Z'))
+  assert.deepEqual(firstTab.loadHistory().map((entry) => entry.id), ['two', 'one'])
+  assert.equal(leaderboard(secondTab.loadHistory())[0].total, 102000)
 })
 
 test('leaderboard sums final scores by trimmed case-insensitive names, with safe keys', () => {

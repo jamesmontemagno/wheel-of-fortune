@@ -1,5 +1,5 @@
 const PLAYERS_KEY = 'wheel-of-wisdom.players.v1'
-const HISTORY_KEY = 'wheel-of-wisdom.history.v1'
+const HISTORY_PREFIX = 'wheel-of-wisdom.history.v1.'
 const validName = (name) => typeof name === 'string' && name.length <= 24
 const validScore = (score) => Number.isSafeInteger(score) && score >= 0
 
@@ -32,8 +32,16 @@ export function createStorage(getStorage = () => globalThis.localStorage) {
     },
     savePlayers: (count, names) => write(PLAYERS_KEY, { count, names }),
     loadHistory() {
-      const saved = read(HISTORY_KEY)
-      if (!Array.isArray(saved)) return []
+      const saved = []
+      try {
+        const storage = getStorage()
+        for (let index = 0; index < storage.length; index += 1) {
+          const key = storage.key(index)
+          if (key?.startsWith(HISTORY_PREFIX)) saved.push(read(key))
+        }
+      } catch {
+        return []
+      }
       return saved.filter((entry) =>
         entry && typeof entry.id === 'string' &&
         typeof entry.finishedAt === 'string' && Number.isFinite(Date.parse(entry.finishedAt)) &&
@@ -43,8 +51,16 @@ export function createStorage(getStorage = () => globalThis.localStorage) {
         Number.isInteger(entry.champion) && entry.champion >= 0 && entry.champion < entry.players.length &&
         typeof entry.bonusWon === 'boolean' && typeof entry.bonusPrizeLabel === 'string' &&
         validScore(entry.bonusPrize))
+        .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
     },
-    saveHistory: (history) => write(HISTORY_KEY, history),
+    // Separate records prevent one tab's older history from overwriting another's games.
+    saveHistory: (history) => {
+      let saved = true
+      for (const entry of history) {
+        if (!write(`${HISTORY_PREFIX}${entry.id}`, entry)) saved = false
+      }
+      return saved
+    },
   }
 }
 

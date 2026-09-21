@@ -1,7 +1,8 @@
 import './style.css'
 import {
-  WHEEL_SEGMENTS, VOWELS, createGame, spinWheel, guessLetter, solvePuzzle,
-  nextRound, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed,
+  WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForRound,
+  createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
+  nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed,
 } from './game.js'
 
 const app = document.querySelector('#app')
@@ -20,6 +21,9 @@ const icons = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 8.5a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1-1.5 2.5m0 3v.1"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+  plane: '<path d="M10 3.5 21 12l-11 8.5 2-8.5z"/><path d="M3 12h9"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  gift: '<rect x="3" y="9" width="18" height="12" rx="2"/><path d="M3 13h18M12 9v12M12 9C9 9 7 8 7 6.5A2.5 2.5 0 0 1 12 6a2.5 2.5 0 0 1 5 .5C17 8 15 9 12 9z"/>',
 }
 const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`
 const colors = ['#e7ab65', '#a8cdbb', '#e78371', '#f1d98a', '#a7bcd4', '#e9cb74', '#d0bbd9', '#e9ba76', '#aed0bd', '#dce1d8', '#e68b7a', '#aebfd7']
@@ -34,29 +38,45 @@ let sound = false
 let audio
 let bonusDeadline = 0
 let bonusTimer
+let turnTimer
+let turnKey = ''
+let turnRemaining = TURN_SECONDS * 1000
+let turnLastTick = 0
 let dialogReturnFocus
 
-function wheelMarkup(preview = false) {
-  const size = WHEEL_SEGMENTS.length
+function activeWheel() {
+  if (!game) return WHEEL_SEGMENTS
+  if (['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)) return BONUS_WHEEL
+  return wheelForRound(game.round)
+}
+
+function wheelMarkup(preview = false, segments = activeWheel()) {
+  const size = segments.length
   const angle = 360 / size
   const point = (degrees, radius) => {
     const radians = degrees * Math.PI / 180
     return [160 + radius * Math.cos(radians), 160 + radius * Math.sin(radians)]
   }
-  const sectors = WHEEL_SEGMENTS.map((segment, index) => {
+  const sectors = segments.map((segment, index) => {
     const center = -90 + index * angle
     const start = point(center - angle / 2, 151)
     const end = point(center + angle / 2, 151)
     const label = segment.type === 'cash' ? money(segment.value) : segment.label.toUpperCase()
+    const fill = segment.type === 'bankrupt' ? '#283e36'
+      : segment.type === 'trip' ? '#63a2c4'
+        : segment.type === 'mystery' ? (index % 2 ? '#3f6f57' : '#d8b25f')
+          : colors[index % colors.length]
+    const ink = segment.type === 'bankrupt' || segment.type === 'trip' ? '#fff9ed' : segment.type === 'mystery' ? '#fffdf0' : '#243f35'
+    const fontSize = segment.type === 'mystery' ? 22 : segment.type === 'cash' ? (size > 14 ? 11 : 13) : 9
     return `<g>
-      <path d="M160 160 L${start.join(' ')} A151 151 0 0 1 ${end.join(' ')} Z" fill="${segment.type === 'bankrupt' ? '#283e36' : colors[index % colors.length]}" stroke="#fff8e9" stroke-width="1.5"/>
-      <text x="160" y="48" transform="rotate(${index * angle} 160 160)" text-anchor="middle" fill="${segment.type === 'bankrupt' ? '#fff9ed' : '#243f35'}" font-size="${segment.type === 'cash' ? 14 : 9}" font-weight="800">${escape(label)}</text>
+      <path d="M160 160 L${start.join(' ')} A151 151 0 0 1 ${end.join(' ')} Z" fill="${fill}" stroke="#fff8e9" stroke-width="1.5"/>
+      <text x="160" y="48" transform="rotate(${index * angle} 160 160)" text-anchor="middle" fill="${ink}" font-size="${fontSize}" font-weight="800">${escape(label)}</text>
     </g>`
   }).join('')
   return `<div class="wheel-wrap ${preview ? 'wheel-preview' : ''}">
     <span class="wheel-pointer" aria-hidden="true"></span>
     <div class="wheel-outer">
-      <svg class="wheel-disc" viewBox="0 0 320 320" style="transform:rotate(${wheelAngle}deg)" role="img" aria-label="Prize wheel with cash, Bankrupt, and Lose a Turn spaces">
+      <svg class="wheel-disc" viewBox="0 0 320 320" style="transform:rotate(${wheelAngle}deg)" role="img" aria-label="${segments === BONUS_WHEEL ? 'Mystery prize wheel with sealed envelopes' : 'Prize wheel with cash, trip surprises, Bankrupt, and Lose a Turn spaces'}">
         <circle cx="160" cy="160" r="159" fill="#264b3b"/>
         ${sectors}
         ${Array.from({ length: size }, (_, i) => {
@@ -160,7 +180,7 @@ function readNames() {
 function boardMarkup() {
   const words = game.puzzle.phrase.split(' ')
   const longest = Math.max(...words.map((word) => word.length))
-  const isBonus = ['bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
+  const isBonus = ['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   return `<section class="puzzle-section" aria-label="Puzzle board">
     <div class="puzzle-heading"><span class="category"><span aria-hidden="true">✦</span> ${escape(game.puzzle.category)}</span><span class="puzzle-meta">${isBonus ? 'THE FINAL CHALLENGE' : `${game.puzzle.phrase.replace(/[^A-Z]/gi, '').length} LETTERS`}</span></div>
     <div class="puzzle-board" style="--longest-word:${longest}">
@@ -178,7 +198,18 @@ function playerMarkup() {
     <div class="player-score color-${i} ${game.activePlayer === i ? 'active-player' : ''}">
       <div class="score-name"><span class="score-dot" aria-hidden="true"></span><span>${escape(player.name)}</span>${game.activePlayer === i ? '<span class="turn-tag">UP</span>' : ''}</div>
       <strong>${money(player.round)}</strong><span class="banked-label">BANKED <b>${money(player.total)}</b></span>
+      ${player.trips.length > 0 ? `<span class="trip-tag">${icon('plane')} ${player.trips.length} TRIP${player.trips.length === 1 ? '' : 'S'} HELD</span>` : ''}
     </div>`).join('')}</div>`
+}
+
+function turnBannerMarkup() {
+  if (game.phase !== 'playing') return ''
+  const player = game.players[game.activePlayer]
+  return `<div class="turn-banner color-${game.activePlayer}" aria-live="polite">
+    <span class="turn-banner-pulse" aria-hidden="true"></span>
+    <span class="turn-banner-name"><small>IT’S YOUR TURN</small><strong>${escape(player.name)}</strong></span>
+    <span class="turn-clock" id="turn-clock" role="timer" aria-label="Seconds left in this turn">${icon('clock')}<span id="turn-seconds">${TURN_SECONDS}</span><small>SEC</small></span>
+  </div>`
 }
 
 function keyboardMarkup() {
@@ -206,36 +237,42 @@ function playingControls() {
   return `<section class="wheel-panel" aria-label="Spin and actions">
     <div class="wheel-panel-heading"><span class="card-eyebrow">A LITTLE LUCK GOES A LONG WAY</span><span aria-hidden="true">✧</span></div>
     ${wheelMarkup()}
-    <div class="wheel-result">${spinning ? 'Round and round we go…' : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
+    <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingTrip ? `<strong>${escape(game.pendingTrip.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
-    <p class="wheel-note">${game.round === 3 ? 'DOUBLE STAKES · All cash wedges pay 2×' : 'Watch out for Bankrupt & Lose a Turn.'}</p>
+    <p class="wheel-note">${game.round === 3 ? 'DOUBLE STAKES · All cash wedges pay 2×' : 'Watch out for Bankrupt & Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip') ? ' · trip surprises in play' : ''}</p>
   </section>`
 }
 
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card"><span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div><button class="button button-primary" id="next-round">${game.round === 3 ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card"><span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((trip) => `<div>${icon('plane')}<span><strong>${escape(trip.label)}</strong><small>${escape(trip.note)}</small></span><b>${money(trip.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === 3 ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {
+  const spinningWheel = game.phase === 'bonus-spin'
   const picking = game.phase === 'bonus-pick'
-  return `<section class="bonus-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">ONE LAST MOMENT OF MAGIC</span><h2>${escape(game.players[game.champion].name)},<br>this is your shot.</h2><div class="prize-amount">${money(game.bonusPrize)}<span>BONUS PRIZE</span></div>
-    ${picking ? '<p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.</p>' : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">20</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
+  const prizeBlock = spinningWheel
+    ? `${wheelMarkup()}<p>Six sealed envelopes. One is yours.<br>Spin to lock in your mystery prize.</p><button class="button button-primary" id="bonus-spin" ${spinning ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Sealing your envelope…' : 'Spin for the mystery prize'}</button>`
+    : `<div class="prize-amount mystery-prize">${icon('gift')}<span>ENVELOPE ${game.bonusSpin?.slot ?? '?'} · MYSTERY PRIZE</span></div>`
+  return `<section class="bonus-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">ONE LAST MOMENT OF MAGIC</span><h2>${escape(game.players[game.champion].name)},<br>this is your shot.</h2>
+    ${prizeBlock}
+    ${spinningWheel ? '' : picking ? '<p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve the puzzle to unseal your prize.</p>' : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
   </section>`
 }
 
 function finalMarkup() {
   const champion = game.players[game.champion]
   const rankings = game.players.map((p, i) => ({ ...p, index: i })).sort((a, b) => b.total - a.total || (a.index === game.champion ? -1 : b.index === game.champion ? 1 : a.index - b.index))
-  return `<section class="final-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">THAT’S A WRAP, WORD WIZARDS</span><h2>${escape(champion.name)}<br>takes the crown.</h2><p>${game.bonusWon ? 'The bonus puzzle? Crushed it. What a finish.' : 'No bonus this time. Still a game-night champion.'}</p><div class="final-rankings">${rankings.map((p, i) => `<div><span class="rank">${i + 1}</span><span>${escape(p.name)}</span><strong>${money(p.total)}</strong></div>`).join('')}</div><button class="button button-primary" id="play-again">One more round? ${icon('spin')}</button><span class="setup-footnote">New game. Fresh puzzles. Same good company.</span></section>`
+  return `<section class="final-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">THAT’S A WRAP, WORD WIZARDS</span><h2>${escape(champion.name)}<br>takes the crown.</h2><p>${game.bonusWon ? 'The bonus puzzle? Crushed it. What a finish.' : 'The mystery envelope stays sealed. Still a game-night champion.'}</p><div class="prize-amount mystery-prize ${game.bonusWon ? 'unlocked' : 'sealed'}">${icon('gift')}<span>${game.bonusWon ? `${escape(game.bonusPrizeLabel ?? 'MYSTERY PRIZE')} · ${money(game.bonusPrize)}` : 'MYSTERY PRIZE · NEVER OPENED'}</span></div><div class="final-rankings">${rankings.map((p, i) => `<div><span class="rank">${i + 1}</span><span>${escape(p.name)}</span><strong>${money(p.total)}</strong></div>`).join('')}</div><button class="button button-primary" id="play-again">One more round? ${icon('spin')}</button><span class="setup-footnote">New game. Fresh puzzles. Same good company.</span></section>`
 }
 
 function renderGame() {
-  const bonus = ['bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
+  const bonus = ['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   shell(`<section class="game-shell">
     <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / 3</span>${game.round === 3 ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of 3`}">${[1, 2, 3].map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
     ${playerMarkup()}
+    ${turnBannerMarkup()}
     <div class="turn-message" role="status" aria-live="polite"><span class="status-spark" aria-hidden="true">✳</span><span>${spinning ? 'A little suspense is part of the fun. Hold tight…' : escape(game.message)}</span></div>
     <div class="play-layout">
       <div class="puzzle-column">${boardMarkup()}${game.phase === 'playing' || game.phase === 'bonus-pick' ? keyboardMarkup() : `<div class="after-puzzle"><span aria-hidden="true">✧</span>${game.phase === 'round-end' ? 'Great minds. Good times. On to the next one.' : game.phase === 'game-over' ? 'The best part? You can do it all again.' : 'Deep breath. You’ve got this.'}</div>`}</div>
@@ -255,6 +292,7 @@ function renderGame() {
     })
   })
   document.querySelector('#spin')?.addEventListener('click', spin)
+  document.querySelector('#bonus-spin')?.addEventListener('click', spinMystery)
   document.querySelector('#buy-vowel')?.addEventListener('click', () => { vowelMode = !vowelMode; renderGame() })
   document.querySelector('#solve')?.addEventListener('click', showSolve)
   document.querySelector('#next-round')?.addEventListener('click', () => act(() => { nextRound(game); vowelMode = false; wheelAngle = 0 }))
@@ -271,6 +309,7 @@ function renderGame() {
     })
   })
   if (game.phase === 'bonus-solve') updateClock()
+  syncTurnTimer()
 }
 
 function act(action) {
@@ -283,19 +322,17 @@ function act(action) {
   }
 }
 
-function spin() {
-  if (spinning || game.phase !== 'playing' || game.action !== 'spin') return
-  const result = structuredClone(game)
-  spinWheel(result)
+function animateSpin(result, landedIndex, segmentCount, onSettle) {
   spinning = true
   renderGame()
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const duration = reduced ? 80 : 2800
-  const target = (360 - result.lastSpin.index * (360 / WHEEL_SEGMENTS.length)) % 360
+  const target = (360 - landedIndex * (360 / segmentCount)) % 360
   const current = ((wheelAngle % 360) + 360) % 360
   wheelAngle += 360 * 5 + ((target - current + 360) % 360)
   const wheel = document.querySelector('.wheel-disc')
   requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!wheel) return
     wheel.style.transition = `transform ${duration}ms cubic-bezier(.15,.75,.13,1)`
     wheel.style.transform = `rotate(${wheelAngle}deg)`
   }))
@@ -303,15 +340,81 @@ function spin() {
   setTimeout(() => {
     game = result
     spinning = false
-    tone(game.lastSpin.type === 'cash' ? 720 : 180, 0.2)
+    onSettle()
     renderGame()
   }, duration + 60)
 }
 
+function spin() {
+  if (spinning || game.phase !== 'playing' || game.action !== 'spin') return
+  const segmentCount = activeWheel().length
+  const result = structuredClone(game)
+  spinWheel(result)
+  animateSpin(result, result.lastSpin.index, segmentCount, () => {
+    tone(game.lastSpin.type === 'trip' ? 990 : game.lastSpin.type === 'cash' ? 720 : 180, game.lastSpin.type === 'trip' ? 0.3 : 0.2)
+  })
+}
+
+function spinMystery() {
+  if (spinning || game.phase !== 'bonus-spin') return
+  const segmentCount = BONUS_WHEEL.length
+  const result = structuredClone(game)
+  spinBonusWheel(result)
+  wheelAngle = 0
+  animateSpin(result, result.bonusSpin.index, segmentCount, () => tone(840, 0.25))
+}
+
 function startBonusTimer() {
-  bonusDeadline = Date.now() + 20_000
+  bonusDeadline = Date.now() + BONUS_SECONDS * 1000
   clearInterval(bonusTimer)
   bonusTimer = setInterval(updateClock, 200)
+}
+
+function syncTurnTimer() {
+  const running = game?.phase === 'playing'
+  if (!running) {
+    clearInterval(turnTimer)
+    turnTimer = undefined
+    turnKey = ''
+    return
+  }
+  const key = `${game.round}:${game.activePlayer}:${game.turnSerial}`
+  if (key !== turnKey) {
+    turnKey = key
+    turnRemaining = TURN_SECONDS * 1000
+  }
+  turnLastTick = Date.now()
+  paintTurnClock()
+  if (!turnTimer) turnTimer = setInterval(tickTurnClock, 250)
+}
+
+function tickTurnClock() {
+  if (game?.phase !== 'playing') {
+    syncTurnTimer()
+    return
+  }
+  const now = Date.now()
+  const elapsed = now - turnLastTick
+  turnLastTick = now
+  // The clock pauses while the wheel spins or a dialog is open, so nobody loses a turn to an animation.
+  if (spinning || document.querySelector('dialog[open]')) return
+  turnRemaining = Math.max(0, turnRemaining - elapsed)
+  paintTurnClock()
+  if (turnRemaining === 0) {
+    clearInterval(turnTimer)
+    turnTimer = undefined
+    vowelMode = false
+    tone(200, 0.25)
+    act(() => expireTurn(game))
+  }
+}
+
+function paintTurnClock() {
+  const seconds = Math.ceil(turnRemaining / 1000)
+  const clock = document.querySelector('#turn-clock')
+  const display = document.querySelector('#turn-seconds')
+  if (display) display.textContent = seconds
+  clock?.classList.toggle('urgent', seconds <= 5)
 }
 
 function updateClock() {
@@ -354,11 +457,12 @@ function showSolve() {
 
 function showHelp() {
   showDialog('A good time, explained.', `<p>A pass-and-play word game for 2 or 3 people. Play together on this device; no accounts or connection needed after loading.</p><ol class="rules-list">
-    <li><strong>Spin, then pick a consonant.</strong> Earn the wheel value for every matching letter. A miss passes the phone.</li>
+    <li><strong>Spin, then pick a consonant.</strong> Earn the wheel value for every matching letter. A miss passes the phone. You have ${TURN_SECONDS} seconds per turn; the clock pauses while the wheel spins or this window is open.</li>
     <li><strong>Vowels are $250.</strong> Buy one before spinning if you have enough round cash. They don’t earn cash, and a miss still costs a turn.</li>
-    <li><strong>Watch those tricky wedges.</strong> Bankrupt wipes only your current round cash. Lose a Turn leaves your money alone. Both pass the turn.</li>
+    <li><strong>Watch those tricky wedges.</strong> Bankrupt wipes your current round cash and any held trips. Lose a Turn leaves your money alone. Both pass the turn.</li>
+    <li><strong>Chase the trip surprises.</strong> The wheel grows each round, and from round two a Trip wedge reveals a surprise getaway. Claim it with a matching consonant and solve that round to bank it.</li>
     <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. Round 3 doubles cash wedges.</li>
-    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Start with R S T L N E, pick 3 consonants and a vowel, then you have 20 seconds and one guess for the bonus prize.</li>
+    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin the mystery wheel to seal a hidden prize, start with R S T L N E, pick 3 consonants and a vowel, then you have ${BONUS_SECONDS} seconds and one guess to unlock it.</li>
   </ol><p class="fair-play-note">Friendly house rules, original puzzles, pretend money. An independent fan-made game, not affiliated with the television show.</p><button class="button button-primary" data-close>Sounds like game night ${icon('arrow')}</button>`)
 }
 
@@ -369,6 +473,9 @@ function confirmNewGame() {
 
 function reset() {
   clearInterval(bonusTimer)
+  clearInterval(turnTimer)
+  turnTimer = undefined
+  turnKey = ''
   game = null
   vowelMode = false
   wheelAngle = 0
@@ -400,7 +507,9 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && game?.phase === 'bonus-solve') updateClock()
+  if (document.hidden) return
+  if (game?.phase === 'bonus-solve') updateClock()
+  if (game?.phase === 'playing') turnLastTick = Date.now()
 })
 
 renderLobby()

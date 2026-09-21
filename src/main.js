@@ -1,9 +1,10 @@
 import './style.css'
 import {
-  WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForRound,
+  WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
   createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed,
 } from './game.js'
+import { createStorage, recordGame, leaderboard } from './storage.js'
 
 const app = document.querySelector('#app')
 const money = (value) => `$${value.toLocaleString('en-US')}`
@@ -29,8 +30,15 @@ const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const colors = ['#e7ab65', '#a8cdbb', '#e78371', '#f1d98a', '#a7bcd4', '#e9cb74', '#d0bbd9', '#e9ba76', '#aed0bd', '#dce1d8', '#e68b7a', '#aebfd7']
 
 let game = null
-let playerCount = 2
-let names = ['', '', '']
+const storage = createStorage()
+const savedPlayers = storage.loadPlayers()
+let playerCount = savedPlayers.count
+let names = savedPlayers.names
+let history = storage.loadHistory()
+let gameId
+let gameRecorded = false
+let lobbyPage = 'play'
+let storageFailed = false
 let spinning = false
 let wheelAngle = 0
 let vowelMode = false
@@ -47,7 +55,7 @@ let dialogReturnFocus
 function activeWheel() {
   if (!game) return WHEEL_SEGMENTS
   if (['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)) return BONUS_WHEEL
-  return wheelForRound(game.round)
+  return wheelForGame(game)
 }
 
 function wheelMarkup(preview = false, segments = activeWheel()) {
@@ -101,7 +109,10 @@ function header() {
 }
 
 function shell(content) {
-  app.innerHTML = `${header()}<main id="main">${content}</main>
+  app.innerHTML = `${header()}
+    ${!game ? `<nav class="lobby-tabs" aria-label="Game sections"><button id="play-tab" aria-pressed="${lobbyPage === 'play'}" class="${lobbyPage === 'play' ? 'selected' : ''}">${icon('spin')} Play</button><button id="history-tab" aria-pressed="${lobbyPage === 'history'}" class="${lobbyPage === 'history' ? 'selected' : ''}">${icon('trophy')} History</button></nav>` : ''}
+    <p id="storage-notice" class="storage-notice" role="status">${storageFailed ? 'Local saving is unavailable. New names and results will only last for this visit.' : ''}</p>
+    <main id="main">${content}</main>
     <footer class="site-footer"><span>A little luck. A lot of wordplay.</span><span>Made for your kind of game night <span aria-hidden="true">✦</span></span></footer>
     <dialog id="modal" aria-labelledby="dialog-title"></dialog>`
   document.querySelector('#help').onclick = showHelp
@@ -116,11 +127,24 @@ function shell(content) {
   document.querySelector('.brand').onclick = (event) => {
     event.preventDefault()
     if (game && !spinning) confirmNewGame()
+    else if (!game) { lobbyPage = 'play'; renderLobby() }
   }
   document.querySelector('#new-game')?.addEventListener('click', confirmNewGame)
+  document.querySelector('#play-tab')?.addEventListener('click', () => {
+    lobbyPage = 'play'
+    renderLobby()
+    document.querySelector('#play-tab').focus()
+  })
+  document.querySelector('#history-tab')?.addEventListener('click', () => {
+    readNames()
+    lobbyPage = 'history'
+    renderHistory()
+    document.querySelector('#history-tab').focus()
+  })
 }
 
 function renderLobby() {
+  lobbyPage = 'play'
   shell(`<section class="lobby">
     <div class="lobby-intro">
       <div class="eyebrow"><span class="tiny-star">✦</span> YOUR POCKET-SIZED GAME NIGHT</div>
@@ -159,6 +183,7 @@ function renderLobby() {
     button.onclick = () => {
       readNames()
       playerCount = Number(button.dataset.count)
+      savePlayers()
       renderLobby()
       document.querySelector(`[data-count="${playerCount}"]`).focus()
     }
@@ -167,14 +192,53 @@ function renderLobby() {
     event.preventDefault()
     readNames()
     game = createGame(names.slice(0, playerCount).map((name, i) => name.trim() || `Player ${i + 1}`))
+    gameId = crypto.randomUUID()
+    gameRecorded = false
     tone(660)
     renderGame()
     window.scrollTo({ top: 0, behavior: 'instant' })
   }
+  document.querySelector('#setup-form').addEventListener('input', readNames)
 }
 
 function readNames() {
   document.querySelectorAll('.player-field input').forEach((input, i) => { names[i] = input.value })
+  savePlayers()
+}
+
+function checkSaved(success) {
+  if (success) return
+  storageFailed = true
+  const notice = document.querySelector('#storage-notice')
+  if (notice) notice.textContent = 'Local saving is unavailable. New names and results will only last for this visit.'
+}
+
+function savePlayers() {
+  checkSaved(storage.savePlayers(playerCount, names))
+}
+
+function renderHistory() {
+  const scores = leaderboard(history)
+  shell(`<section class="history-page" aria-labelledby="history-title">
+    <span class="card-eyebrow">THE GAME-NIGHT HALL OF FAME</span>
+    <h1 id="history-title">Good times. Great scores.</h1>
+    <p class="history-note">Completed games, saved on this device. Scores include banked trips and won bonus prizes.</p>
+    ${history.length ? `<div class="history-layout">
+      <section class="history-card" aria-labelledby="leaderboard-title"><h2 id="leaderboard-title">${icon('trophy')} Leaderboard</h2>
+        <p class="history-note">Names are combined regardless of capitalization.</p>
+        <ol class="leaderboard">${scores.map((player, index) => `<li><span class="rank">${index + 1}</span><span class="history-player"><strong>${escape(player.name)}</strong><small>${player.games} game${player.games === 1 ? '' : 's'}</small></span><b>${money(player.total)}</b></li>`).join('')}</ol>
+      </section>
+      <section class="history-card" aria-labelledby="past-games-title"><h2 id="past-games-title">Past games</h2>
+        <ol class="history-games">${history.map((entry) => `<li>
+          <time datetime="${escape(entry.finishedAt)}">${escape(new Date(entry.finishedAt).toLocaleString())}</time>
+          <h3>${escape(entry.players[entry.champion].name)} takes the crown</h3>
+          <div class="final-rankings">${[...entry.players].sort((a, b) => b.total - a.total).map((player) => `<div><span>${escape(player.name)}</span><strong>${money(player.total)}</strong></div>`).join('')}</div>
+          <p class="history-note">${entry.bonusWon ? 'Bonus won' : 'Bonus revealed, not won'}: ${escape(entry.bonusPrizeLabel)} · ${money(entry.bonusPrize)}</p>
+        </li>`).join('')}</ol>
+      </section>
+    </div>` : `<div class="history-card history-empty">${icon('trophy')}<h2>Your first chapter awaits.</h2><p>Finish a game to save the scores and start your leaderboard.</p></div>`}
+    <p class="history-note">Pretend prizes, real bragging rights. Clearing browser data removes saved names and history.</p>
+  </section>`)
 }
 
 function boardMarkup() {
@@ -257,17 +321,30 @@ function bonusMarkup() {
     : `<div class="prize-amount mystery-prize">${icon('gift')}<span>ENVELOPE ${game.bonusSpin?.slot ?? '?'} · MYSTERY PRIZE</span></div>`
   return `<section class="bonus-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">ONE LAST MOMENT OF MAGIC</span><h2>${escape(game.players[game.champion].name)},<br>this is your shot.</h2>
     ${prizeBlock}
-    ${spinningWheel ? '' : picking ? '<p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve the puzzle to unseal your prize.</p>' : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
+    ${spinningWheel ? '' : picking ? '<p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve to win cash, a car, or a dream getaway. We’ll open your envelope either way!</p>' : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
   </section>`
 }
 
 function finalMarkup() {
   const champion = game.players[game.champion]
   const rankings = game.players.map((p, i) => ({ ...p, index: i })).sort((a, b) => b.total - a.total || (a.index === game.champion ? -1 : b.index === game.champion ? 1 : a.index - b.index))
-  return `<section class="final-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">THAT’S A WRAP, WORD WIZARDS</span><h2>${escape(champion.name)}<br>takes the crown.</h2><p>${game.bonusWon ? 'The bonus puzzle? Crushed it. What a finish.' : 'The mystery envelope stays sealed. Still a game-night champion.'}</p><div class="prize-amount mystery-prize ${game.bonusWon ? 'unlocked' : 'sealed'}">${icon('gift')}<span>${game.bonusWon ? `${escape(game.bonusPrizeLabel ?? 'MYSTERY PRIZE')} · ${money(game.bonusPrize)}` : 'MYSTERY PRIZE · NEVER OPENED'}</span></div><div class="final-rankings">${rankings.map((p, i) => `<div><span class="rank">${i + 1}</span><span>${escape(p.name)}</span><strong>${money(p.total)}</strong></div>`).join('')}</div><button class="button button-primary" id="play-again">One more round? ${icon('spin')}</button><span class="setup-footnote">New game. Fresh puzzles. Same good company.</span></section>`
+  const prizeSymbol = { cash: '💵', car: '🚗', trip: '🌏', home: '🏡' }[game.bonusPrizeType] ?? '🎁'
+  return `<section class="final-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">THAT’S A WRAP, WORD WIZARDS</span><h2>${escape(champion.name)}<br>takes the crown.</h2><p>${game.bonusWon ? 'The bonus puzzle? Crushed it. What a finish.' : 'Not this time—but let’s see what was inside. Your banked winnings are safe.'}</p>
+    <div class="envelope-reveal ${game.bonusWon ? 'bonus-win' : 'bonus-loss'}" aria-label="Opened bonus envelope">
+      <div class="envelope-flap" aria-hidden="true"></div>
+      <div class="envelope-prize"><span class="prize-symbol" aria-hidden="true">${prizeSymbol}</span><span class="card-eyebrow">${game.bonusWon ? 'YOU WON!' : 'INSIDE YOUR ENVELOPE · NOT WON'}</span><h3>${escape(game.bonusPrizeLabel)}</h3><strong>${money(game.bonusPrize)}</strong><p>${escape(game.bonusPrizeNote ?? '')}</p></div>
+      <span class="envelope-front" aria-hidden="true">✦</span>
+      ${game.bonusWon ? '<span class="prize-sparkles" aria-hidden="true">✦ ✧ ✦ ✧ ✦</span>' : ''}
+    </div>
+    <div class="final-rankings">${rankings.map((p, i) => `<div><span class="rank">${i + 1}</span><span>${escape(p.name)}</span><strong>${money(p.total)}</strong></div>`).join('')}</div><button class="button button-primary" id="play-again">One more round? ${icon('spin')}</button><button class="text-button" id="view-history">View history & leaderboard</button><span class="setup-footnote">${storageFailed ? 'Results kept for this visit only.' : 'Results saved on this device.'}</span></section>`
 }
 
 function renderGame() {
+  if (game.phase === 'game-over' && !gameRecorded) {
+    history = recordGame(history, game, gameId)
+    gameRecorded = true
+    checkSaved(storage.saveHistory(history))
+  }
   const bonus = ['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   shell(`<section class="game-shell">
     <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / 3</span>${game.round === 3 ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of 3`}">${[1, 2, 3].map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
@@ -297,6 +374,12 @@ function renderGame() {
   document.querySelector('#solve')?.addEventListener('click', showSolve)
   document.querySelector('#next-round')?.addEventListener('click', () => act(() => { nextRound(game); vowelMode = false; wheelAngle = 0 }))
   document.querySelector('#play-again')?.addEventListener('click', reset)
+  document.querySelector('#view-history')?.addEventListener('click', () => {
+    reset()
+    lobbyPage = 'history'
+    renderHistory()
+    document.querySelector('#history-tab').focus()
+  })
   document.querySelector('#bonus-form')?.addEventListener('submit', (event) => {
     event.preventDefault()
     const answer = document.querySelector('#bonus-answer').value
@@ -460,14 +543,15 @@ function showHelp() {
     <li><strong>Spin, then pick a consonant.</strong> Earn the wheel value for every matching letter. A miss passes the phone. You have ${TURN_SECONDS} seconds per turn; the clock pauses while the wheel spins or this window is open.</li>
     <li><strong>Vowels are $250.</strong> Buy one before spinning if you have enough round cash. They don’t earn cash, and a miss still costs a turn.</li>
     <li><strong>Watch those tricky wedges.</strong> Bankrupt wipes your current round cash and any held trips. Lose a Turn leaves your money alone. Both pass the turn.</li>
-    <li><strong>Chase the trip surprises.</strong> The wheel grows each round, and from round two a Trip wedge reveals a surprise getaway. Claim it with a matching consonant and solve that round to bank it.</li>
-    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. Round 3 doubles cash wedges.</li>
-    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin the mystery wheel to seal a hidden prize, start with R S T L N E, pick 3 consonants and a vowel, then you have ${BONUS_SECONDS} seconds and one guess to unlock it.</li>
+    <li><strong>Chase the trip surprises.</strong> The wheel grows each round, and from round two a Trip wedge reveals a surprise getaway. Claim it with a matching consonant and solve that round to bank it. Once claimed, that wedge becomes cash for the rest of the round, even if the trip is later lost.</li>
+    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. Round 3 doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
+    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for hidden cash, a car, a world trip, or a cabin. Start with R S T L N E, pick 3 consonants and a vowel, then you have ${BONUS_SECONDS} seconds and one guess to win it. The envelope opens even if you miss or run out of time.</li>
+    <li><strong>Keep the memories.</strong> Names and completed game scores save on this device. Visit History for past games and total scores by name. Unfinished games are not saved.</li>
   </ol><p class="fair-play-note">Friendly house rules, original puzzles, pretend money. An independent fan-made game, not affiliated with the television show.</p><button class="button button-primary" data-close>Sounds like game night ${icon('arrow')}</button>`)
 }
 
 function confirmNewGame() {
-  const dialog = showDialog('Call it a game?', '<p>Returning home ends this game and clears the scores. Ready for a fresh start?</p><button class="button button-primary" id="confirm-reset">Start fresh</button><button class="text-button" data-close>Stay in the game</button>')
+  const dialog = showDialog('Call it a game?', `<p>${game.phase === 'game-over' ? 'Your completed results remain in History.' : 'Returning home discards this unfinished game. Only completed games appear in History.'} Your saved names and past results stay. Ready for a fresh start?</p><button class="button button-primary" id="confirm-reset">Start fresh</button><button class="text-button" data-close>Stay in the game</button>`)
   dialog.querySelector('#confirm-reset').onclick = reset
 }
 

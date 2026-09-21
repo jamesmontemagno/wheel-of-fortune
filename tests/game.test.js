@@ -4,6 +4,7 @@ import {
   WHEEL_SEGMENTS, ROUND_WHEELS, BONUS_WHEEL, BONUS_PRIZES, TRIP_PRIZES, TURN_SECONDS, wheelForRound, wheelForGame,
   VOWELS, createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed, normalizeAnswer,
+  usablePuzzleHistory, PUZZLES_PER_GAME,
 } from '../src/game.js';
 import { PUZZLES } from '../src/puzzles.js';
 
@@ -443,6 +444,28 @@ test('successive rounds and bonus never reuse puzzles even with constant randomn
   assert.equal(game.usedPuzzleIds.length, 4);
   assert.equal(new Set(game.usedPuzzleIds).size, 4);
   assert.equal(game.puzzle.id, game.usedPuzzleIds.at(-1));
+});
+
+test('previously played puzzles are skipped in new games', () => {
+  const seen = PUZZLES.slice(0, 30).map((p) => p.id);
+  const game = createGame(['Ada', 'Bo'], fixed, seen);
+  assert.ok(!seen.includes(game.puzzle.id));
+  assert.deepEqual(game.usedPuzzleIds, [...seen, game.puzzle.id]);
+  finishRound(game);
+  nextRound(game, fixed);
+  assert.ok(!seen.includes(game.puzzle.id));
+});
+
+test('puzzle history is sanitized and recycles once the bank runs low', () => {
+  const ids = PUZZLES.map((p) => p.id);
+  assert.deepEqual(usablePuzzleHistory([ids[0], ids[0], 'nope', 7, null]), [ids[0]]);
+  assert.deepEqual(usablePuzzleHistory(null), []);
+  const nearlyDone = ids.slice(0, PUZZLES.length - PUZZLES_PER_GAME);
+  assert.equal(usablePuzzleHistory(nearlyDone).length, nearlyDone.length);
+  assert.deepEqual(usablePuzzleHistory(ids.slice(0, PUZZLES.length - PUZZLES_PER_GAME + 1)), []);
+  const game = createGame(['Ada', 'Bo'], fixed, ids);
+  assert.ok(ids.includes(game.puzzle.id));
+  assert.deepEqual(game.usedPuzzleIds, [game.puzzle.id]);
 });
 
 test('selection excludes exhausted categories before choosing a category', () => {

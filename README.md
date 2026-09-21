@@ -44,19 +44,20 @@ Enable it once per repository: **Settings → Pages → Build and deployment →
 - The player with the most banked money gets the bonus round. Ties are settled with a random draw.
 - The champion spins a **mystery wheel** of six sealed envelopes worth $25,000 to $100,000, including cash, a new roadster, a trip around the world, and a cozy cabin. The prize stays hidden until the bonus round ends.
 - The bonus puzzle starts with R, S, T, L, N, E revealed. Pick three more consonants and one vowel, then solve within 20 seconds with one attempt. The clock continues if you switch apps or open help.
+- Solving a round sets off a short confetti-and-fanfare celebration for the winning player, and the wheel grows to fill the screen on phones while it spins.
 - The envelope opens with an animation whether you win, guess incorrectly, or run out of time. Only a correct answer adds the prize value to your score.
 - The **History** tab shows completed games and a leaderboard of cumulative final scores, including banked trips and won bonus prizes. Names are matched without regard to surrounding spaces or capitalization; identical names share a leaderboard entry.
 
-Categories, puzzles, trip surprises, and the mystery envelope are selected randomly, with no repeated puzzles within a game. Every wheel segment is equally likely. Sound is optional, reduced-motion preferences are respected, and a physical keyboard can be used to select letters.
+Categories, puzzles, trip surprises, and the mystery envelope are selected randomly, with no repeated puzzles within a game. Puzzles played in earlier games on this device are also skipped; once the bank can no longer fill a full game, the played list resets and every puzzle becomes available again. Every wheel segment is equally likely. Sound is optional, reduced-motion preferences are respected, and a physical keyboard can be used to select letters.
 
-Unfinished games live in memory: reloading or returning home discards the current game without saving its scores. Player names and completed game history are stored locally in this browser, with no account or server; clearing browser data removes them. If local storage is unavailable or full, the app stays playable and warns that new data lasts only for the current visit. Players use a **single shared device**, not separate online sessions. Gameplay needs no network after loading; the optional web fonts fall back to system fonts if unavailable.
+Unfinished games live in memory: reloading or returning home discards the current game without saving its scores. Player names, played puzzles, and completed game history are stored locally in this browser, with no account or server; clearing browser data removes them. If local storage is unavailable or full, the app stays playable and warns that new data lasts only for the current visit. Players use a **single shared device**, not separate online sessions. Gameplay needs no network after loading; the optional web fonts fall back to system fonts if unavailable.
 
 ## Project layout
 
 - `src/main.js` — screen rendering, accessible dialogs, wheel animation, sound, and the turn and bonus timers.
 - `src/style.css` — responsive portrait and desktop layouts.
 - `src/game.js` — game rules, scoring, turns, and random selection.
-- `src/storage.js` — local player settings, completed game records, and leaderboard aggregation.
+- `src/storage.js` — local player settings, played puzzles, completed game records, and leaderboard aggregation.
 - `src/puzzles.js` — original categorized puzzle bank.
 - `tests/game.test.js` — deterministic game-rule coverage.
 - `tests/storage.test.js` — local persistence and leaderboard coverage.

@@ -1,7 +1,7 @@
 import './style.css'
 import {
   WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
-  createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
+  createGame, spinWheel, guessLetter, solvePuzzle, expireTurn, usablePuzzleHistory,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed,
 } from './game.js'
 import { createStorage, recordGame, leaderboard } from './storage.js'
@@ -35,6 +35,7 @@ const savedPlayers = storage.loadPlayers()
 let playerCount = savedPlayers.count
 let names = savedPlayers.names
 let history = storage.loadHistory()
+let seenPuzzleIds = usablePuzzleHistory(storage.loadSeenPuzzles())
 let gameId
 let gameRecorded = false
 let lobbyPage = 'play'
@@ -191,7 +192,8 @@ function renderLobby() {
   document.querySelector('#setup-form').onsubmit = (event) => {
     event.preventDefault()
     readNames()
-    game = createGame(names.slice(0, playerCount).map((name, i) => name.trim() || `Player ${i + 1}`))
+    game = createGame(names.slice(0, playerCount).map((name, i) => name.trim() || `Player ${i + 1}`), Math.random, seenPuzzleIds)
+    rememberPuzzles()
     gameId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
     gameRecorded = false
     tone(660)
@@ -199,6 +201,12 @@ function renderLobby() {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }
   document.querySelector('#setup-form').addEventListener('input', readNames)
+}
+
+// Boards are remembered across games so the same puzzle is not shown again.
+function rememberPuzzles() {
+  seenPuzzleIds = usablePuzzleHistory(game.usedPuzzleIds)
+  checkSaved(storage.saveSeenPuzzles(seenPuzzleIds))
 }
 
 function readNames() {
@@ -300,7 +308,7 @@ function keyboardMarkup() {
 
 function playingControls() {
   const canBuy = game.action === 'spin' && game.players[game.activePlayer].round >= 250 && [...VOWELS].some((l) => !game.usedLetters.includes(l))
-  return `<section class="wheel-panel" aria-label="Spin and actions">
+  return `<section class="wheel-panel ${spinning ? 'spinning' : ''}" aria-label="Spin and actions">
     <div class="wheel-panel-heading"><span class="card-eyebrow">A LITTLE LUCK GOES A LONG WAY</span><span aria-hidden="true">✧</span></div>
     ${wheelMarkup()}
     <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingTrip ? `<strong>${escape(game.pendingTrip.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
@@ -310,9 +318,12 @@ function playingControls() {
   </section>`
 }
 
+const confettiMarkup = () => `<div class="confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) =>
+  `<span class="confetti-piece piece-${i % 6}" style="--x:${(i * 5.5 + 3).toFixed(1)}%;--delay:${(i % 9) * 0.12}s"></span>`).join('')}</div>`
+
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card"><span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((trip) => `<div>${icon('plane')}<span><strong>${escape(trip.label)}</strong><small>${escape(trip.note)}</small></span><b>${money(trip.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === 3 ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((trip) => `<div>${icon('plane')}<span><strong>${escape(trip.label)}</strong><small>${escape(trip.note)}</small></span><b>${money(trip.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === 3 ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {
@@ -331,7 +342,7 @@ function finalMarkup() {
   const champion = game.players[game.champion]
   const rankings = game.players.map((p, i) => ({ ...p, index: i })).sort((a, b) => b.total - a.total || (a.index === game.champion ? -1 : b.index === game.champion ? 1 : a.index - b.index))
   const prizeSymbol = { cash: '💵', car: '🚗', trip: '🌏', home: '🏡' }[game.bonusPrizeType] ?? '🎁'
-  return `<section class="final-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">THAT’S A WRAP, WORD WIZARDS</span><h2>${escape(champion.name)}<br>takes the crown.</h2><p>${game.bonusWon ? 'The bonus puzzle? Crushed it. What a finish.' : 'Not this time—but let’s see what was inside. Your banked winnings are safe.'}</p>
+  return `<section class="final-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">THAT’S A WRAP, WORD WIZARDS</span><h2>${escape(champion.name)}<br>takes the crown.</h2><p>${game.bonusWon ? 'The bonus puzzle? Crushed it. What a finish.' : 'Not this time—but let’s see what was inside. Your banked winnings are safe.'}</p>
     <div class="envelope-reveal ${game.bonusWon ? 'bonus-win' : 'bonus-loss'}" aria-label="Opened bonus envelope">
       <div class="envelope-flap" aria-hidden="true"></div>
       <div class="envelope-prize"><span class="prize-symbol" aria-hidden="true">${prizeSymbol}</span><span class="card-eyebrow">${game.bonusWon ? 'YOU WON!' : 'INSIDE YOUR ENVELOPE · NOT WON'}</span><h3>${escape(game.bonusPrizeLabel)}</h3><strong>${money(game.bonusPrize)}</strong><p>${escape(game.bonusPrizeNote ?? '')}</p></div>
@@ -374,7 +385,7 @@ function renderGame() {
   document.querySelector('#bonus-spin')?.addEventListener('click', spinMystery)
   document.querySelector('#buy-vowel')?.addEventListener('click', () => { vowelMode = !vowelMode; renderGame() })
   document.querySelector('#solve')?.addEventListener('click', showSolve)
-  document.querySelector('#next-round')?.addEventListener('click', () => act(() => { nextRound(game); vowelMode = false; wheelAngle = 0 }))
+  document.querySelector('#next-round')?.addEventListener('click', () => act(() => { nextRound(game); rememberPuzzles(); vowelMode = false; wheelAngle = 0 }))
   document.querySelector('#play-again')?.addEventListener('click', reset)
   document.querySelector('#view-history')?.addEventListener('click', () => {
     reset()
@@ -390,7 +401,8 @@ function renderGame() {
       if (Date.now() >= bonusDeadline) expireBonus(game)
       else solveBonus(game, answer)
       clearInterval(bonusTimer)
-      tone(game.bonusWon ? 880 : 220, 0.3)
+      if (game.bonusWon) fanfare()
+      else tone(220, 0.3)
     })
   })
   if (game.phase === 'bonus-solve') updateClock()
@@ -412,6 +424,12 @@ function animateSpin(result, landedIndex, segmentCount, onSettle) {
   renderGame()
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const duration = reduced ? 80 : 2800
+  // On phones the wheel grows while it spins, so bring it fully into view.
+  if (window.matchMedia('(max-width: 720px)').matches) {
+    document.querySelector('.wheel-wrap')?.scrollIntoView({
+      block: 'center', behavior: reduced ? 'instant' : 'smooth',
+    })
+  }
   const target = (360 - landedIndex * (360 / segmentCount)) % 360
   const current = ((wheelAngle % 360) + 360) % 360
   wheelAngle += 360 * 5 + ((target - current + 360) % 360)
@@ -536,7 +554,12 @@ function showSolve() {
     const answer = dialog.querySelector('#answer').value
     if (!answer.trim()) return
     dialog.close()
-    act(() => { solvePuzzle(game, answer); vowelMode = false; tone(game.phase === 'round-end' ? 880 : 200, 0.25) })
+    act(() => {
+      solvePuzzle(game, answer)
+      vowelMode = false
+      if (game.phase === 'round-end') fanfare()
+      else tone(200, 0.25)
+    })
   }
 }
 
@@ -568,6 +591,13 @@ function reset() {
   bonusDeadline = 0
   renderLobby()
   window.scrollTo({ top: 0, behavior: 'instant' })
+}
+
+// A short rising fanfare marks a solved round or a won bonus.
+function fanfare() {
+  [0, 150, 300, 480].forEach((delay, index) => {
+    setTimeout(() => tone([523, 659, 784, 1047][index], index === 3 ? 0.45 : 0.18), delay)
+  })
 }
 
 function tone(frequency, duration = 0.09) {

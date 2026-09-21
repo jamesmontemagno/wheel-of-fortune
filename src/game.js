@@ -169,7 +169,19 @@ function passTurn(game) {
   game.message += ` ${game.players[game.activePlayer].name}, it is your turn.`;
 }
 
-export function createGame(names, rng = Math.random) {
+// A full game uses one puzzle per round plus the bonus puzzle.
+export const PUZZLES_PER_GAME = 4;
+
+// Puzzles played in earlier games are skipped until the bank can no longer fill a game.
+export function usablePuzzleHistory(seenPuzzleIds) {
+  const known = new Set(PUZZLES.map((puzzle) => puzzle.id));
+  const seen = Array.isArray(seenPuzzleIds)
+    ? [...new Set(seenPuzzleIds.filter((id) => known.has(id)))]
+    : [];
+  return PUZZLES.length - seen.length >= PUZZLES_PER_GAME ? seen : [];
+}
+
+export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
   requireCondition(
     Array.isArray(names) && names.length >= 2 && names.length <= 3,
     'Choose two or three players.',
@@ -179,7 +191,8 @@ export function createGame(names, rng = Math.random) {
     'Player names must contain 1 to 24 characters.',
   );
   const players = names.map((name) => ({ name: name.trim(), total: 0, round: 0, trips: [] }));
-  const puzzle = pickPuzzle([], rng);
+  const seen = usablePuzzleHistory(seenPuzzleIds);
+  const puzzle = pickPuzzle(seen, rng);
   return {
     players,
     activePlayer: 0,
@@ -195,7 +208,7 @@ export function createGame(names, rng = Math.random) {
     bonusLetters: [],
     bonusPrize: 25000,
     bonusWon: null,
-    usedPuzzleIds: [puzzle.id],
+    usedPuzzleIds: [...seen, puzzle.id],
     lastSpin: null,
     pendingTrip: null,
     claimedTripIndices: [],

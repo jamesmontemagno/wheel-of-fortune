@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {
   WHEEL_SEGMENTS, ROUND_WHEELS, BONUS_WHEEL, BONUS_PRIZES, TRIP_PRIZES, TURN_SECONDS, wheelForRound, wheelForGame,
   VOWELS, createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
-  nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed, normalizeAnswer,
-  usablePuzzleHistory, PUZZLES_PER_GAME,
+  nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick,
+  isLetterRevealed, normalizeAnswer, usablePuzzleHistory, PUZZLES_PER_GAME, BONUS_PICK_SECONDS,
 } from '../src/game.js';
 import { PUZZLES } from '../src/puzzles.js';
 
@@ -884,6 +884,7 @@ test('phase guards protect all actions outside their allowed phases', () => {
     [['bonus-pick'], (game) => chooseBonusLetter(game, 'B')],
     [['bonus-solve'], (game) => solveBonus(game, game.puzzle.phrase)],
     [['bonus-solve'], (game) => expireBonus(game)],
+    [['bonus-pick'], (game) => expireBonusPick(game)],
   ];
   for (const phase of phases) {
     for (const [allowed, action] of actions) {
@@ -943,4 +944,61 @@ test('full three-player game runs through guesses, hazards, rounds and bonus', (
   assert.equal(game.phase, 'game-over');
   assert.equal(game.bonusWon, true);
   assert.equal(new Set(game.usedPuzzleIds).size, 4);
+});
+
+test('the opening round carries a single bankrupt wedge', () => {
+  assert.equal(wheelForRound(1).filter((segment) => segment.type === 'bankrupt').length, 1);
+  for (let round = 2; round <= 3; round++) {
+    assert.ok(wheelForRound(round).filter((segment) => segment.type === 'bankrupt').length >= 1);
+  }
+});
+
+test('bankrupt never lands twice in a row', () => {
+  for (let round = 1; round <= 3; round++) {
+    const game = gameWith();
+    game.round = round;
+    spin(game, 'bankrupt');
+    assert.equal(game.lastSpin.type, 'bankrupt');
+    const wheel = wheelForGame(game);
+    const eligible = wheel.filter((segment) => segment.type !== 'bankrupt');
+    for (let step = 0; step < eligible.length; step++) {
+      const next = structuredClone(game);
+      spinWheel(next, () => (step + 0.5) / eligible.length);
+      assert.notEqual(next.lastSpin.type, 'bankrupt');
+      assert.deepEqual(wheelForGame(game)[next.lastSpin.index].type, next.lastSpin.type);
+    }
+    // Once a safe wedge lands, bankrupt is back in play.
+    spin(game, 'cash');
+    const after = structuredClone(game);
+    const bankruptIndex = wheelForGame(after).findIndex((segment) => segment.type === 'bankrupt');
+    after.action = 'spin';
+    spinWheel(after, () => (bankruptIndex + 0.5) / wheelForGame(after).length);
+    assert.equal(after.lastSpin.type, 'bankrupt');
+  }
+});
+
+test('running out of pick time starts the bonus solve with the letters chosen', () => {
+  assert.equal(BONUS_PICK_SECONDS, 60);
+  const game = reachBonus();
+  assert.equal(game.bonusPickSeconds, BONUS_PICK_SECONDS);
+  chooseBonusLetter(game, 'B');
+  assert.equal(expireBonusPick(game), game);
+  assert.equal(game.phase, 'bonus-solve');
+  assert.deepEqual(game.bonusLetters, ['B']);
+  assert.match(game.message, /time is up/i);
+  assert.equal(isLetterRevealed(game, 'B'), true);
+  assert.equal(isLetterRevealed(game, 'C'), false);
+  assertRejected(game, () => chooseBonusLetter(game, 'C'));
+  assertRejected(game, () => expireBonusPick(game));
+  assert.equal(solveBonus(game, game.puzzle.phrase), game);
+  assert.equal(game.bonusWon, true);
+});
+
+test('the bonus pick clock can expire before any letters are chosen', () => {
+  const game = reachBonus();
+  expireBonusPick(game);
+  assert.equal(game.phase, 'bonus-solve');
+  assert.deepEqual(game.bonusLetters, []);
+  expireBonus(game);
+  assert.equal(game.bonusWon, false);
 });

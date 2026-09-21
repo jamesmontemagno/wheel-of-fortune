@@ -38,12 +38,13 @@ Enable it once per repository: **Settings → Pages → Build and deployment →
 - Each round uses a bigger wheel with richer cash: 12 spaces in round one, 14 in round two, and 16 in round three.
 - **Trip** wedges appear from round two. Land on one to reveal a surprise trip, claim it with a matching consonant, then solve that round to bank its value. Once claimed, that wedge becomes cash for the rest of the round ($600 in round two; $800 before the double-stakes multiplier in round three). Bankrupt or losing the round loses held trips, but does not restore the wedge. Missed guesses leave the trip wedge available.
 - Buy a vowel for $250 from your current round winnings before spinning. Vowels do not earn money; a missing vowel still costs $250 and passes the turn.
-- **Bankrupt** clears only current round winnings and held trips. **Lose a Turn** preserves them. Both pass play to the next person.
+- **Bankrupt** appears once on the round-one wheel and never lands twice in a row. It clears only current round winnings and held trips. **Lose a Turn** preserves them. Both pass play to the next person.
 - Solve the whole puzzle to bank your round winnings, with a $1,000 minimum, plus any trips you claimed. Only the solver banks money. Case, spacing, and punctuation do not matter; wrong solutions pass the turn.
-- Play three rounds with double cash values in round three. The lowest banked score starts each new round; ties are broken in rotating player order, starting with the usual round starter. Player one starts the first round.
+- Play three rounds, with round three flagged as **DOUBLE STAKES** by a banner above the scoreboard; every cash wedge pays double. The lowest banked score starts each new round; ties are broken in rotating player order, starting with the usual round starter. Player one starts the first round.
 - The player with the most banked money gets the bonus round. Ties are settled with a random draw.
+- The bonus puzzle board stays covered while the champion spins for an envelope.
 - The champion spins a **mystery wheel** of six sealed envelopes worth $25,000 to $100,000, including cash, a new roadster, a trip around the world, and a cozy cabin. The prize stays hidden until the bonus round ends.
-- The bonus puzzle starts with R, S, T, L, N, E revealed. Pick three more consonants and one vowel, then solve within 20 seconds with one attempt. The clock continues if you switch apps or open help.
+- The bonus puzzle starts with R, S, T, L, N, E revealed. Pick three more consonants and one vowel within 60 seconds; if that clock runs out, the solve starts with whatever letters were picked. Then solve within 20 seconds with one attempt. The clock continues if you switch apps or open help.
 - Solving a round sets off a short confetti-and-fanfare celebration for the winning player, and the wheel grows to fill the screen on phones while it spins.
 - The envelope opens with an animation whether you win, guess incorrectly, or run out of time. Only a correct answer adds the prize value to your score.
 - The **History** tab shows completed games and a leaderboard of cumulative final scores, including banked trips and won bonus prizes. Names are matched without regard to surrounding spaces or capitalization; identical names share a leaderboard entry.

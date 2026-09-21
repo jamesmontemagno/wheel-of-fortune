@@ -1,5 +1,6 @@
 const PLAYERS_KEY = 'wheel-of-wisdom.players.v1'
 const HISTORY_PREFIX = 'wheel-of-wisdom.history.v1.'
+const PUZZLES_KEY = 'wheel-of-wisdom.puzzles.v1'
 const validName = (name) => typeof name === 'string' && name.length <= 24
 const validScore = (score) => Number.isSafeInteger(score) && score >= 0
 
@@ -31,6 +32,13 @@ export function createStorage(getStorage = () => globalThis.localStorage) {
       return saved
     },
     savePlayers: (count, names) => write(PLAYERS_KEY, { count, names }),
+    // Puzzles already played on this device, so new games can pick fresh boards.
+    loadSeenPuzzles() {
+      const saved = read(PUZZLES_KEY)
+      if (!Array.isArray(saved)) return []
+      return [...new Set(saved.filter((id) => typeof id === 'string' && id.length <= 64))]
+    },
+    saveSeenPuzzles: (ids) => write(PUZZLES_KEY, [...new Set(ids.filter((id) => typeof id === 'string'))]),
     loadHistory() {
       const saved = []
       try {

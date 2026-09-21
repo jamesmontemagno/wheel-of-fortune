@@ -92,3 +92,18 @@ test('leaderboard sums final scores by trimmed case-insensitive names, with safe
     { name: '__proto__', total: 0, games: 1 },
   ])
 })
+
+test('played puzzles persist and invalid entries are ignored', () => {
+  const local = memoryStorage()
+  const storage = createStorage(() => local)
+  assert.deepEqual(storage.loadSeenPuzzles(), [])
+  assert.equal(storage.saveSeenPuzzles(['puzzle-1-1', 'puzzle-1-1', 'puzzle-2-3', 7]), true)
+  assert.deepEqual(createStorage(() => local).loadSeenPuzzles(), ['puzzle-1-1', 'puzzle-2-3'])
+  local.setItem('wheel-of-wisdom.puzzles.v1', '{"nope":true}')
+  assert.deepEqual(storage.loadSeenPuzzles(), [])
+  local.setItem('wheel-of-wisdom.puzzles.v1', JSON.stringify([1, 'ok', 'x'.repeat(65)]))
+  assert.deepEqual(storage.loadSeenPuzzles(), ['ok'])
+  const blocked = createStorage(() => { throw new Error('Storage blocked') })
+  assert.deepEqual(blocked.loadSeenPuzzles(), [])
+  assert.equal(blocked.saveSeenPuzzles(['puzzle-1-1']), false)
+})

@@ -1,8 +1,10 @@
 import './style.css'
 import {
   WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
+  BONUS_PICK_SECONDS,
   createGame, spinWheel, guessLetter, solvePuzzle, expireTurn, usablePuzzleHistory,
-  nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, isLetterRevealed,
+  nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick,
+  isLetterRevealed,
 } from './game.js'
 import { createStorage, recordGame, leaderboard } from './storage.js'
 
@@ -47,6 +49,8 @@ let sound = false
 let audio
 let bonusDeadline = 0
 let bonusTimer
+let pickDeadline = 0
+let pickTimer
 let turnTimer
 let turnKey = ''
 let turnRemaining = TURN_SECONDS * 1000
@@ -267,6 +271,14 @@ function boardMarkup() {
   </section>`
 }
 
+// The bonus puzzle stays hidden until the envelope is locked in.
+function sealedBoardMarkup() {
+  return `<section class="puzzle-section sealed-board" aria-label="Puzzle board">
+    <div class="puzzle-heading"><span class="category"><span aria-hidden="true">✦</span> BONUS PUZZLE</span><span class="puzzle-meta">SEALED</span></div>
+    <div class="puzzle-board sealed"><p>${icon('gift')}<span>Your bonus puzzle stays covered until your envelope is locked in. Spin first!</span></p></div>
+  </section>`
+}
+
 function playerMarkup() {
   return `<div class="scoreboard" style="--players:${game.players.length}" aria-label="Player scores">${game.players.map((player, i) => `
     <div class="player-score color-${i} ${game.activePlayer === i ? 'active-player' : ''}">
@@ -302,7 +314,7 @@ function keyboardMarkup() {
       const used = bonus ? 'RSTLNE'.includes(letter) || game.bonusLetters.includes(letter) : game.usedLetters.includes(letter)
       return `<button class="letter-key ${used ? 'used' : ''} ${VOWELS.includes(letter) ? 'vowel' : ''}" data-letter="${letter}" ${enabled(letter) ? '' : 'disabled'} aria-label="${letter}${used ? ', already chosen' : ''}">${letter}</button>`
     }).join('')}</div>`).join('')}</div>
-    <p class="keyboard-footnote">${bonus ? 'R, S, T, L, N, E are on the house. Your 20 seconds start after your fourth pick.' : vowelMode ? 'Vowels cost $250, whether or not they’re in the puzzle.' : 'Spin for consonants. Buy a vowel. Or go for the solve.'}</p>
+    <p class="keyboard-footnote">${bonus ? `R, S, T, L, N, E are on the house. Pick within ${BONUS_PICK_SECONDS} seconds, then ${BONUS_SECONDS} seconds to solve.` : vowelMode ? 'Vowels cost $250, whether or not they’re in the puzzle.' : 'Spin for consonants. Buy a vowel. Or go for the solve.'}</p>
   </section>`
 }
 
@@ -314,7 +326,7 @@ function playingControls() {
     <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingTrip ? `<strong>${escape(game.pendingTrip.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
-    <p class="wheel-note">${game.round === 3 ? 'DOUBLE STAKES · All cash wedges pay 2×' : 'Watch out for Bankrupt & Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip') ? ' · trip surprises in play' : ''}</p>
+    <p class="wheel-note">${game.round === 3 ? '<strong class="double-stakes-note">DOUBLE STAKES · ALL CASH WEDGES PAY 2×</strong>' : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip') ? ' · trip surprises in play' : ''}</p>
   </section>`
 }
 
@@ -334,7 +346,7 @@ function bonusMarkup() {
     : `<div class="prize-amount mystery-prize">${icon('gift')}<span>ENVELOPE ${game.bonusSpin?.slot ?? '?'} · MYSTERY PRIZE</span></div>`
   return `<section class="bonus-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">ONE LAST MOMENT OF MAGIC</span><h2>${escape(game.players[game.champion].name)},<br>this is your shot.</h2>
     ${prizeBlock}
-    ${spinningWheel ? '' : picking ? '<p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve to win cash, a car, or a dream getaway. We’ll open your envelope either way!</p>' : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
+    ${spinningWheel ? '' : picking ? `<div class="bonus-clock" id="pick-clock" role="timer" aria-label="Time remaining to pick letters"><span id="pick-seconds">${BONUS_PICK_SECONDS}</span><small>SECONDS TO PICK</small></div><p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve to win cash, a car, or a dream getaway. We’ll open your envelope either way!</p>` : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
   </section>`
 }
 
@@ -361,11 +373,12 @@ function renderGame() {
   const bonus = ['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   shell(`<section class="game-shell">
     <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / 3</span>${game.round === 3 ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of 3`}">${[1, 2, 3].map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
+    ${!bonus && game.round === 3 ? '<div class="double-stakes-banner" role="status"><strong>DOUBLE STAKES</strong><span>Every cash wedge pays 2× this round.</span></div>' : ''}
     ${playerMarkup()}
     ${turnBannerMarkup()}
     <div class="turn-message" role="status" aria-live="polite"><span class="status-spark" aria-hidden="true">✳</span><span>${spinning ? 'A little suspense is part of the fun. Hold tight…' : escape(game.message)}</span></div>
     <div class="play-layout">
-      <div class="puzzle-column">${boardMarkup()}${game.phase === 'playing' || game.phase === 'bonus-pick' ? keyboardMarkup() : `<div class="after-puzzle"><span aria-hidden="true">✧</span>${game.phase === 'round-end' ? 'Great minds. Good times. On to the next one.' : game.phase === 'game-over' ? 'The best part? You can do it all again.' : 'Deep breath. You’ve got this.'}</div>`}</div>
+      <div class="puzzle-column">${game.phase === 'bonus-spin' ? sealedBoardMarkup() : boardMarkup()}${game.phase === 'playing' || game.phase === 'bonus-pick' ? keyboardMarkup() : `<div class="after-puzzle"><span aria-hidden="true">✧</span>${game.phase === 'round-end' ? 'Great minds. Good times. On to the next one.' : game.phase === 'game-over' ? 'The best part? You can do it all again.' : 'Deep breath. You’ve got this.'}</div>`}</div>
       ${game.phase === 'playing' ? playingControls() : game.phase === 'round-end' ? endRoundMarkup() : game.phase === 'game-over' ? finalMarkup() : bonusMarkup()}
     </div>
   </section>`)
@@ -373,7 +386,7 @@ function renderGame() {
     button.onclick = () => act(() => {
       if (game.phase === 'bonus-pick') {
         chooseBonusLetter(game, button.dataset.letter)
-        if (game.phase === 'bonus-solve') startBonusTimer()
+        if (game.phase === 'bonus-solve') { clearInterval(pickTimer); startBonusTimer() }
       } else {
         guessLetter(game, button.dataset.letter)
         vowelMode = false
@@ -406,6 +419,7 @@ function renderGame() {
     })
   })
   if (game.phase === 'bonus-solve') updateClock()
+  if (game.phase === 'bonus-pick') updatePickClock()
   syncTurnTimer()
 }
 
@@ -464,7 +478,38 @@ function spinMystery() {
   const result = structuredClone(game)
   spinBonusWheel(result)
   wheelAngle = 0
-  animateSpin(result, result.bonusSpin.index, segmentCount, () => tone(840, 0.25))
+  animateSpin(result, result.bonusSpin.index, segmentCount, () => {
+    tone(840, 0.25)
+    startPickTimer()
+  })
+}
+
+function startPickTimer() {
+  pickDeadline = Date.now() + BONUS_PICK_SECONDS * 1000
+  clearInterval(pickTimer)
+  pickTimer = setInterval(updatePickClock, 200)
+}
+
+function updatePickClock() {
+  if (game?.phase !== 'bonus-pick') {
+    clearInterval(pickTimer)
+    return
+  }
+  if (!pickDeadline) return
+  const remaining = Math.max(0, Math.ceil((pickDeadline - Date.now()) / 1000))
+  const display = document.querySelector('#pick-seconds')
+  if (display) {
+    display.textContent = remaining
+    display.closest('.bonus-clock').classList.toggle('urgent', remaining <= 10)
+  }
+  if (remaining === 0) {
+    clearInterval(pickTimer)
+    tone(200, 0.25)
+    pickDeadline = 0
+    expireBonusPick(game)
+    startBonusTimer()
+    renderGame()
+  }
 }
 
 function startBonusTimer() {
@@ -567,10 +612,10 @@ function showHelp() {
   showDialog('A good time, explained.', `<p>A pass-and-play word game for 2 or 3 people. Play together on this device; no accounts or connection needed after loading.</p><ol class="rules-list">
     <li><strong>Spin, then pick a consonant.</strong> Earn the wheel value for every matching letter. A miss passes the phone. You have ${TURN_SECONDS} seconds per turn; the clock pauses while the wheel spins or this window is open.</li>
     <li><strong>Vowels are $250.</strong> Buy one before spinning if you have enough round cash. They don’t earn cash, and a miss still costs a turn.</li>
-    <li><strong>Watch those tricky wedges.</strong> Bankrupt wipes your current round cash and any held trips. Lose a Turn leaves your money alone. Both pass the turn.</li>
+    <li><strong>Watch those tricky wedges.</strong> Round one has a single Bankrupt, and Bankrupt never lands twice in a row. Bankrupt wipes your current round cash and any held trips. Lose a Turn leaves your money alone. Both pass the turn.</li>
     <li><strong>Chase the trip surprises.</strong> The wheel grows each round, and from round two a Trip wedge reveals a surprise getaway. Claim it with a matching consonant and solve that round to bank it. Once claimed, that wedge becomes cash for the rest of the round, even if the trip is later lost.</li>
     <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. Round 3 doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
-    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for hidden cash, a car, a world trip, or a cabin. Start with R S T L N E, pick 3 consonants and a vowel, then you have ${BONUS_SECONDS} seconds and one guess to win it. The envelope opens even if you miss or run out of time.</li>
+    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for hidden cash, a car, a world trip, or a cabin. The bonus puzzle stays covered until your envelope is locked in. Start with R S T L N E, then pick 3 consonants and a vowel within ${BONUS_PICK_SECONDS} seconds; if that clock runs out you solve with the letters you have. You then have ${BONUS_SECONDS} seconds and one guess to win it. The envelope opens even if you miss or run out of time.</li>
     <li><strong>Keep the memories.</strong> Names and completed game scores save on this device. Visit History for past games and total scores by name. Unfinished games are not saved.</li>
   </ol><p class="fair-play-note">Friendly house rules, original puzzles, pretend money. An independent fan-made game, not affiliated with the television show.</p><button class="button button-primary" data-close>Sounds like game night ${icon('arrow')}</button>`)
 }
@@ -582,6 +627,7 @@ function confirmNewGame() {
 
 function reset() {
   clearInterval(bonusTimer)
+  clearInterval(pickTimer)
   clearInterval(turnTimer)
   turnTimer = undefined
   turnKey = ''
@@ -589,6 +635,7 @@ function reset() {
   vowelMode = false
   wheelAngle = 0
   bonusDeadline = 0
+  pickDeadline = 0
   renderLobby()
   window.scrollTo({ top: 0, behavior: 'instant' })
 }
@@ -625,6 +672,7 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return
   if (game?.phase === 'bonus-solve') updateClock()
+  if (game?.phase === 'bonus-pick') updatePickClock()
   if (game?.phase === 'playing') turnLastTick = Date.now()
 })
 

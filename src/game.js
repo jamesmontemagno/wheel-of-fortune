@@ -6,6 +6,7 @@ const VOWEL_COST = 250;
 
 export const TURN_SECONDS = 30;
 export const BONUS_SECONDS = 20;
+export const BONUS_PICK_SECONDS = 60;
 
 const freezeWheel = (segments) => Object.freeze(segments.map(Object.freeze));
 
@@ -22,7 +23,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '700', type: 'cash', value: 700 },
     { label: '900', type: 'cash', value: 900 },
     { label: '600', type: 'cash', value: 600 },
-    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,000', type: 'cash', value: 1000 },
     { label: '750', type: 'cash', value: 750 },
   ]),
   freezeWheel([
@@ -216,6 +217,7 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     turnSerial: 1,
     turnSeconds: TURN_SECONDS,
     bonusSeconds: BONUS_SECONDS,
+    bonusPickSeconds: BONUS_PICK_SECONDS,
     bonusPrizeLabel: null,
     bonusPrizeNote: null,
     bonusPrizeType: null,
@@ -229,8 +231,12 @@ export function spinWheel(game, rng = Math.random) {
   requireMainAction(game);
   requireCondition(game.action === 'spin', 'Choose a consonant before spinning again.');
   const wheel = wheelForGame(game);
-  const index = randomIndex(wheel.length, rng);
-  const segment = wheel[index];
+  // Two Bankrupts in a row is no fun, so that wedge is skipped right after one lands.
+  const blockBankrupt = game.lastSpin?.type === 'bankrupt';
+  const eligible = wheel
+    .map((segment, index) => ({ segment, index }))
+    .filter(({ segment }) => !(blockBankrupt && segment.type === 'bankrupt'));
+  const { segment, index } = eligible[randomIndex(eligible.length, rng)];
   game.lastSpin = { index, ...segment };
   game.pendingTrip = null;
   if (segment.type === 'cash' || segment.type === 'trip') {
@@ -387,7 +393,7 @@ export function spinBonusWheel(game, rng = Math.random) {
   game.bonusPrizeType = prize.type;
   game.bonusPrizeRevealed = false;
   game.phase = 'bonus-pick';
-  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until the bonus round ends. R S T L N E are given. Choose three consonants and one vowel.`;
+  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until the bonus round ends. R S T L N E are given. Choose three consonants and one vowel within ${BONUS_PICK_SECONDS} seconds.`;
   return game;
 }
 
@@ -409,6 +415,14 @@ export function chooseBonusLetter(game, letter) {
   } else {
     game.message = 'Choose three consonants and one vowel in total.';
   }
+  return game;
+}
+
+// Running out of pick time simply starts the solve with whatever letters were chosen.
+export function expireBonusPick(game) {
+  requireCondition(game.phase === 'bonus-pick', 'Bonus letter selection is not open.');
+  game.phase = 'bonus-solve';
+  game.message = `Time is up on your picks! ${game.bonusLetters.length > 0 ? `Your letters are revealed. ` : ''}You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
   return game;
 }
 

@@ -1,11 +1,12 @@
 import { PUZZLES } from './puzzles.js';
 
 export const VOWELS = 'AEIOU';
-const BONUS_GIVEN = 'RSTLNE';
+export const BONUS_GIVEN_LETTERS = 'RSTLNE';
+export const BONUS_MAX_GIVEN_RATIO = 0.3;
 const VOWEL_COST = 250;
 
 export const TURN_SECONDS = 30;
-export const BONUS_SECONDS = 30;
+export const BONUS_SECONDS = 45;
 export const BONUS_PICK_SECONDS = 60;
 
 // The bonus player picks this many extra letters on top of R S T L N E.
@@ -149,8 +150,16 @@ function randomIndex(length, rng) {
   return Math.floor(value * length);
 }
 
-function pickPuzzle(usedIds, rng) {
-  const available = PUZZLES.filter((puzzle) => !usedIds.includes(puzzle.id));
+export function isBonusPuzzleEligible(puzzle) {
+  if (typeof puzzle?.phrase !== 'string') return false;
+  const letters = puzzle.phrase.match(/[A-Z]/gi) ?? [];
+  if (letters.length === 0) return false;
+  const givenLetterCount = letters.filter((letter) => BONUS_GIVEN_LETTERS.includes(letter.toUpperCase())).length;
+  return givenLetterCount / letters.length <= BONUS_MAX_GIVEN_RATIO;
+}
+
+function pickPuzzle(usedIds, rng, eligible = () => true) {
+  const available = PUZZLES.filter((puzzle) => !usedIds.includes(puzzle.id) && eligible(puzzle));
   requireCondition(available.length > 0, 'No unused puzzles remain.');
   const categories = [...new Set(available.map((puzzle) => puzzle.category))];
   const category = categories[randomIndex(categories.length, rng)];
@@ -209,6 +218,15 @@ export function usablePuzzleHistory(seenPuzzleIds) {
   return PUZZLES.length - seen.length >= PUZZLES_PER_GAME ? seen : [];
 }
 
+function historyForNewGame(seenPuzzleIds) {
+  const seen = usablePuzzleHistory(seenPuzzleIds);
+  const seenIds = new Set(seen);
+  const remainingBonusPuzzles = PUZZLES.filter(
+    (puzzle) => isBonusPuzzleEligible(puzzle) && !seenIds.has(puzzle.id),
+  ).length;
+  return remainingBonusPuzzles >= PUZZLES_PER_GAME ? seen : [];
+}
+
 export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
   requireCondition(
     Array.isArray(names) && names.length >= 2 && names.length <= 3,
@@ -219,7 +237,7 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     'Player names must contain 1 to 24 characters.',
   );
   const players = names.map((name) => ({ name: name.trim(), total: 0, round: 0, trips: [] }));
-  const seen = usablePuzzleHistory(seenPuzzleIds);
+  const seen = historyForNewGame(seenPuzzleIds);
   const puzzle = pickPuzzle(seen, rng);
   return {
     players,
@@ -369,7 +387,11 @@ export function nextRound(game, rng = Math.random) {
     tied = leaders.length > 1;
     champion = leaders[tied ? randomIndex(leaders.length, rng) : 0];
   }
-  const puzzle = pickPuzzle(game.usedPuzzleIds, rng);
+  const puzzle = pickPuzzle(
+    game.usedPuzzleIds,
+    rng,
+    game.round === FINAL_ROUND ? isBonusPuzzleEligible : undefined,
+  );
   game.puzzle = puzzle;
   game.usedPuzzleIds.push(puzzle.id);
   game.players.forEach((player) => { player.round = 0; player.trips = []; });
@@ -420,7 +442,7 @@ export function spinBonusWheel(game, rng = Math.random) {
   game.bonusPrizeType = prize.type;
   game.bonusPrizeRevealed = false;
   game.phase = 'bonus-pick';
-  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until the bonus round ends. R S T L N E are given. ${remainingLettersText(game)} You have ${BONUS_PICK_SECONDS} seconds to choose.`;
+  game.message = `Envelope ${game.bonusSpin.slot} is locked in. R S T L N E are given. ${remainingLettersText(game)} You have ${BONUS_PICK_SECONDS} seconds to choose; the board reveals all your letters together before the ${BONUS_SECONDS}-second solve.`;
   return game;
 }
 
@@ -442,7 +464,7 @@ function remainingLettersText(game) {
 export function chooseBonusLetter(game, letter) {
   requireCondition(game.phase === 'bonus-pick', 'Bonus letter selection is not open.');
   const choice = parseLetter(letter);
-  requireCondition(!BONUS_GIVEN.includes(choice), 'R S T L N E are already given.');
+  requireCondition(!BONUS_GIVEN_LETTERS.includes(choice), 'R S T L N E are already given.');
   requireCondition(!game.bonusLetters.includes(choice), 'That bonus letter has already been chosen.');
   const vowel = VOWELS.includes(choice);
   const sameTypeCount = game.bonusLetters.filter((picked) => VOWELS.includes(picked) === vowel).length;
@@ -453,7 +475,7 @@ export function chooseBonusLetter(game, letter) {
   game.bonusLetters.push(choice);
   if (game.bonusLetters.length === BONUS_CONSONANTS + BONUS_VOWELS) {
     game.phase = 'bonus-solve';
-    game.message = `Your letters are revealed. You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
+    game.message = `All your letters are revealed. You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
   } else {
     game.message = `${choice} is in. ${remainingLettersText(game)}`;
   }
@@ -464,21 +486,22 @@ export function chooseBonusLetter(game, letter) {
 export function expireBonusPick(game) {
   requireCondition(game.phase === 'bonus-pick', 'Bonus letter selection is not open.');
   game.phase = 'bonus-solve';
-  game.message = `Time is up on your picks! ${game.bonusLetters.length > 0 ? `Your letters are revealed. ` : ''}You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
+  game.message = `Time is up on your picks! All your letters are revealed. You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
   return game;
 }
 
 export function solveBonus(game, answer) {
   requireCondition(game.phase === 'bonus-solve', 'The bonus puzzle is not ready to solve.');
   const normalized = parseAnswer(answer);
-  game.bonusWon = normalized === normalizeAnswer(game.puzzle.phrase);
-  game.bonusPrizeRevealed = true;
-  if (game.bonusWon) {
-    game.players[game.champion].total += game.bonusPrize;
-    game.message = `${game.players[game.champion].name} unlocks ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}!`;
-  } else {
-    game.message = `Not quite! The envelope held ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}. It was not won, but your banked winnings are safe. Thanks for playing!`;
+  if (normalized !== normalizeAnswer(game.puzzle.phrase)) {
+    game.message = 'Not quite! Try another answer before time runs out.';
+    return game;
   }
+
+  game.bonusWon = true;
+  game.bonusPrizeRevealed = true;
+  game.players[game.champion].total += game.bonusPrize;
+  game.message = `${game.players[game.champion].name} unlocks ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}!`;
   game.phase = 'game-over';
   return game;
 }
@@ -486,9 +509,16 @@ export function solveBonus(game, answer) {
 export function expireBonus(game) {
   requireCondition(game.phase === 'bonus-solve', 'There is no active bonus timer.');
   game.bonusWon = false;
-  game.bonusPrizeRevealed = true;
+  game.bonusPrizeRevealed = false;
   game.phase = 'game-over';
-  game.message = `Time is up! The envelope held ${game.bonusPrizeLabel ?? 'the mystery prize'}, worth $${game.bonusPrize.toLocaleString('en-US')}. It was not won, but your banked winnings are safe. Thanks for playing!`;
+  game.message = 'Time is up! The bonus round was not won, but your banked winnings are safe.';
+  return game;
+}
+
+export function revealBonusPrize(game) {
+  requireCondition(game.phase === 'game-over' && game.bonusWon === false, 'There is no losing bonus envelope to open.');
+  requireCondition(!game.bonusPrizeRevealed, 'The bonus envelope is already open.');
+  game.bonusPrizeRevealed = true;
   return game;
 }
 
@@ -496,8 +526,9 @@ export function isLetterRevealed(game, letter) {
   const normalized = String(letter).toUpperCase();
   if (!/^[A-Z]$/.test(normalized)) return true;
   if (game.phase === 'round-end' || game.phase === 'game-over') return true;
-  if (game.phase === 'bonus-spin' || game.phase === 'bonus-pick' || game.phase === 'bonus-solve') {
-    return BONUS_GIVEN.includes(normalized) || game.bonusLetters.includes(normalized);
+  if (game.phase === 'bonus-spin' || game.phase === 'bonus-pick') return false;
+  if (game.phase === 'bonus-solve') {
+    return BONUS_GIVEN_LETTERS.includes(normalized) || game.bonusLetters.includes(normalized);
   }
   return game.usedLetters.includes(normalized);
 }

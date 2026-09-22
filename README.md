@@ -23,6 +23,16 @@ npm run preview  # Preview the production build
 
 Deploy `dist/` to any static host. Relative asset paths support hosting under a subdirectory, including GitHub Pages.
 
+## Install it like an app
+
+Wheel of Wisdom is a progressive web app, so it can live on a phone home screen and run offline.
+
+- **iPhone/iPad (Safari):** Share → *Add to Home Screen*.
+- **Android (Chrome):** menu → *Add to Home screen* / *Install app*.
+- **Desktop (Chrome/Edge):** install icon in the address bar.
+
+A service worker caches the game shell, so play works without a connection after the first visit. When a new version is deployed the app checks for it on launch, when it returns to the foreground, and hourly; a small toast then offers a **Reload** button to apply the update (nothing reloads mid-game unless you tap it).
+
 ## CI/CD
 
 - `.github/workflows/ci.yml` runs `npm test` and `npm run build` on pull requests and non-`main` branch pushes.

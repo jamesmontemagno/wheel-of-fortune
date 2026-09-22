@@ -426,3 +426,13 @@ dialog .fair-play-note { padding-top: 14px; border-top: 1px solid #e3e5d5; font-
   .confetti { display: none; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+.pwa-toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20; width: min(400px, calc(100% - 32px)); border: 1px solid #e1e1ce; border-radius: 14px; padding: 18px 20px; background: #fffdf4; box-shadow: 0 14px 44px #15291e2e; animation: pwa-toast-in .25s ease-out; }
+.pwa-toast p { font-size: 13px; color: #56604c; line-height: 1.6; margin: 0 0 12px; }
+.pwa-toast-actions { display: flex; align-items: center; gap: 12px; }
+.pwa-toast-actions .button-primary { width: auto; flex: 1; min-height: 42px; }
+.pwa-toast-actions .text-button { margin: 0; padding: 10px 4px; }
+@keyframes pwa-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}

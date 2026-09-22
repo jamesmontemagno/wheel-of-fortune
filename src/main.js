@@ -7,6 +7,7 @@ import {
   isLetterRevealed,
 } from './game.js'
 import { createStorage, recordGame, leaderboard } from './storage.js'
+import { setupPWA } from './pwa.js'
 
 const app = document.querySelector('#app')
 const money = (value) => `$${value.toLocaleString('en-US')}`
@@ -677,3 +678,4 @@ document.addEventListener('visibilitychange', () => {
 })
 
 renderLobby()
+setupPWA()

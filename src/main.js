@@ -302,11 +302,9 @@ function turnBannerMarkup() {
 function keyboardMarkup() {
   const bonus = game.phase === 'bonus-pick'
   const remaining = bonusLettersRemaining(game)
-  const consonantsChosen = game.bonusLetters.filter((l) => !VOWELS.includes(l)).length
-  const vowelsChosen = game.bonusLetters.filter((l) => VOWELS.includes(l)).length
   const enabled = (letter) => {
     if (spinning) return false
-    if (bonus) return !'RSTLNE'.includes(letter) && !game.bonusLetters.includes(letter) && (VOWELS.includes(letter) ? vowelsChosen < 1 : consonantsChosen < 3)
+    if (bonus) return !'RSTLNE'.includes(letter) && !game.bonusLetters.includes(letter) && (VOWELS.includes(letter) ? remaining.vowels > 0 : remaining.consonants > 0)
     if (game.phase !== 'playing' || game.usedLetters.includes(letter)) return false
     return vowelMode ? VOWELS.includes(letter) : game.action === 'consonant' && !VOWELS.includes(letter)
   }
@@ -445,7 +443,7 @@ function openSpinModal(title) {
     dialog.className = 'spin-modal'
     document.body.append(dialog)
   }
-  dialog.innerHTML = `<div class="spin-modal-card" role="status" aria-live="polite"><span class="card-eyebrow">${escape(title)}</span>${wheelMarkup()}<p>Round and round we go…</p></div>`
+  dialog.innerHTML = `<div class="spin-modal-card" role="status"><span class="card-eyebrow">${escape(title)}</span>${wheelMarkup()}<p>Round and round we go…</p></div>`
   if (!dialog.open) dialog.showModal()
   return dialog
 }

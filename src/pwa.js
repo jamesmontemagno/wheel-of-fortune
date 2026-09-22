@@ -12,11 +12,11 @@ function showToast(message, action) {
   toast.querySelector('p').textContent = message
   const actions = toast.querySelector('.pwa-toast-actions')
   if (action) {
-    const confirm = document.createElement('button')
-    confirm.className = 'button button-primary'
-    confirm.textContent = action.label
-    confirm.onclick = () => { toast.remove(); action.run() }
-    actions.append(confirm)
+    const applyButton = document.createElement('button')
+    applyButton.className = 'button button-primary'
+    applyButton.textContent = action.label
+    applyButton.onclick = () => { toast.remove(); action.run() }
+    actions.append(applyButton)
   }
   const dismiss = document.createElement('button')
   dismiss.className = 'text-button'

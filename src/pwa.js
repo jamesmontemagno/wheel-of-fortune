@@ -1,5 +1,3 @@
-import { registerSW } from 'virtual:pwa-register'
-
 // Look for a newer deploy once an hour and whenever the game comes back to the foreground.
 const UPDATE_INTERVAL = 60 * 60 * 1000
 
@@ -27,8 +25,9 @@ function showToast(message, action) {
   if (!action) setTimeout(() => toast.remove(), 6000)
 }
 
-export function setupPWA() {
-  if (!('serviceWorker' in navigator)) return
+export async function setupPWA() {
+  if (window.HybridWebView || !('serviceWorker' in navigator)) return
+  const { registerSW } = await import('virtual:pwa-register')
   const updateSW = registerSW({
     onNeedRefresh() {
       showToast('A new version of Wheel of Wisdom is ready.', {

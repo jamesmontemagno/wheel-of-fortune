@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# .NET MAUI build output and local scaffold scratch files
+**/bin/
+**/obj/
+.tmp-maui/

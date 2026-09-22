@@ -1,4 +1,3 @@
-import './style.css'
 import {
   WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
   BONUS_PICK_SECONDS, FINAL_ROUND, bonusLettersRemaining,
@@ -10,10 +9,27 @@ import { createStorage, recordGame, leaderboard } from './storage.js'
 import { setupPWA } from './pwa.js'
 
 const app = document.querySelector('#app')
+const preferenceKeys = {
+  sound: 'wheel-of-wisdom.sound',
+  players: 'wheel-of-wisdom.players',
+}
+await window.__wheelOfWisdomBridge.initialize()
 const money = (value) => `$${value.toLocaleString('en-US')}`
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char])
+const restorePreference = (key, fallback) => {
+  const value = window.__wheelOfWisdomBridge?.state?.[key]
+  if (value === undefined || value === null) return fallback
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return value
+    }
+  }
+  return value
+}
 const icons = {
   arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
   spin: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-2L20 8M4 16l2.4 3A7 7 0 0 0 18 17"/>',
@@ -34,7 +50,14 @@ const colors = ['#e7ab65', '#a8cdbb', '#e78371', '#f1d98a', '#a7bcd4', '#e9cb74'
 
 let game = null
 const storage = createStorage()
-const savedPlayers = storage.loadPlayers()
+const browserSavedPlayers = storage.loadPlayers()
+const restoredPlayers = restorePreference(preferenceKeys.players, browserSavedPlayers)
+const savedPlayers = [2, 3].includes(restoredPlayers?.count) &&
+  Array.isArray(restoredPlayers.names) &&
+  restoredPlayers.names.length === 3 &&
+  restoredPlayers.names.every((name) => typeof name === 'string' && name.length <= 24)
+  ? restoredPlayers
+  : browserSavedPlayers
 let playerCount = savedPlayers.count
 let names = savedPlayers.names
 let history = storage.loadHistory()
@@ -46,7 +69,7 @@ let storageFailed = false
 let spinning = false
 let wheelAngle = 0
 let vowelMode = false
-let sound = false
+let sound = restorePreference(preferenceKeys.sound, false)
 let audio
 let bonusDeadline = 0
 let bonusTimer
@@ -128,6 +151,7 @@ function shell(content) {
     button.innerHTML = icon(sound ? 'sound' : 'mute')
     button.setAttribute('aria-label', `Turn sound ${sound ? 'off' : 'on'}`)
     button.setAttribute('aria-pressed', String(sound))
+    window.__wheelOfWisdomBridge?.save?.(preferenceKeys.sound, sound)
     tone(520)
   }
   document.querySelector('.brand').onclick = (event) => {
@@ -228,6 +252,9 @@ function checkSaved(success) {
 
 function savePlayers() {
   checkSaved(storage.savePlayers(playerCount, names))
+  if (window.__wheelOfWisdomBridge?.save) {
+    window.__wheelOfWisdomBridge.save(preferenceKeys.players, JSON.stringify({ count: playerCount, names }))
+  }
 }
 
 function renderHistory() {

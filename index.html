@@ -12,10 +12,69 @@
     <meta name="theme-color" content="#f8f6ef" />
     <meta name="description" content="Turn your phone into game night. Spin the wheel, solve original word puzzles, and play with two or three friends on one device." />
     <title>Wheel of Wisdom · Your pocket-sized game night</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app"></div>
     <noscript>This game needs JavaScript enabled to spin the wheel and play.</noscript>
+    <script>
+      const hybridWebViewReady = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = '_framework/hybridwebview.js';
+        script.onload = resolve;
+        script.onerror = resolve;
+        document.head.append(script);
+      });
+      let resolveMauiPreferences;
+      const mauiPreferencesReady = new Promise((resolve) => {
+        resolveMauiPreferences = resolve;
+      });
+
+      window.__wheelOfWisdomBridge = {
+        state: {},
+        async initialize() {
+          await hybridWebViewReady;
+          if (!window.HybridWebView) {
+            resolveMauiPreferences();
+            return;
+          }
+
+          window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'requestRestore' }));
+          await Promise.race([
+            mauiPreferencesReady,
+            new Promise((resolve) => setTimeout(() => {
+              console.warn('MAUI preferences were not restored before startup.');
+              resolve();
+            }, 2000)),
+          ]);
+        },
+        save(key, value) {
+          if (window.HybridWebView) {
+            window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'save', values: { [key]: value } }));
+          }
+          this.state[key] = value;
+        },
+        applyState(payload) {
+          if (!payload || typeof payload !== 'object' || !payload.values) return;
+          Object.entries(payload.values).forEach(([key, value]) => {
+            this.state[key] = value;
+          });
+          resolveMauiPreferences();
+        },
+      };
+
+      window.addEventListener('HybridWebViewMessageReceived', (event) => {
+        const message = event.detail?.message;
+        if (!message) return;
+
+        try {
+          const payload = JSON.parse(message);
+          window.__wheelOfWisdomBridge.applyState(payload);
+        } catch (error) {
+          console.error('Unable to read a message from the MAUI host.', error);
+        }
+      });
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

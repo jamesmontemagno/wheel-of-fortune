@@ -33,6 +33,22 @@ Wheel of Wisdom is a progressive web app, so it can live on a phone home screen 
 
 A service worker caches the game shell, so play works without a connection after the first visit. When a new version is deployed the app checks for it on launch, when it returns to the foreground, and hourly; a small toast then offers a **Reload** button to apply the update (nothing reloads mid-game unless you tap it).
 
+## Mobile app (MAUI HybridWebView)
+
+This repo also includes a native .NET MAUI wrapper at `mobile/WheelOfWisdom.Maui` that hosts the same web app in a `HybridWebView` using the official .NET MAUI pattern. The app reuses the repo's existing web files by linking them into the MAUI raw assets instead of copying them, so the game logic and UI stay in one place.
+
+- `mobile/WheelOfWisdom.Maui` contains the .NET MAUI app shell.
+- `index.html`, `public/`, and `src/` are linked into `Resources/Raw/wwwroot` at build time, so the browser game remains the single source of truth and no generated web build is copied into the app.
+- `Preferences.Default` is used to persist the last sound setting and player state from the native app layer.
+- Browser builds continue using local storage, while the HybridWebView waits for native Preferences before initializing the lobby.
+
+Install the .NET 10 MAUI workload, then build a target from the repo root:
+
+```sh
+dotnet workload install maui
+dotnet build mobile/WheelOfWisdom.Maui/WheelOfWisdom.Maui.csproj -f net10.0-android
+```
+
 ## CI/CD
 
 - `.github/workflows/ci.yml` runs `npm test` and `npm run build` on pull requests and non-`main` branch pushes.

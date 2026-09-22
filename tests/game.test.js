@@ -480,7 +480,7 @@ test('selection excludes exhausted categories before choosing a category', () =>
 });
 
 test('every segment can be selected and lastSpin retains its base wheel value', () => {
-  for (const round of [1, 2, 3, 4]) {
+  for (let round = 1; round <= FINAL_ROUND; round++) {
     const wheel = wheelForRound(round);
     for (let index = 0; index < wheel.length; index++) {
       const game = gameWith();

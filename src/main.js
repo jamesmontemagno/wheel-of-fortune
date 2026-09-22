@@ -1,7 +1,7 @@
 import './style.css'
 import {
   WHEEL_SEGMENTS, BONUS_WHEEL, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
-  BONUS_PICK_SECONDS,
+  BONUS_PICK_SECONDS, FINAL_ROUND, bonusLettersRemaining,
   createGame, spinWheel, guessLetter, solvePuzzle, expireTurn, usablePuzzleHistory,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick,
   isLetterRevealed,
@@ -162,7 +162,7 @@ function renderLobby() {
         <span class="orbit-star star-one" aria-hidden="true">✧</span><span class="orbit-star star-two" aria-hidden="true">✳</span>
         <span class="wheel-sticker">${icon('trophy')} BIG WORDS.<br>BIGGER WINS.</span>
       </div>
-      <div class="game-facts"><span>${icon('people')} 2–3 players</span><span>${icon('spin')} 3 rounds + bonus</span><span>${icon('phone')} One phone</span></div>
+      <div class="game-facts"><span>${icon('people')} 2–3 players</span><span>${icon('spin')} ${FINAL_ROUND} rounds + bonus</span><span>${icon('phone')} One phone</span></div>
     </div>
     <section class="setup-card" aria-labelledby="setup-title">
       <span class="card-eyebrow">FIRST THINGS FIRST</span>
@@ -301,16 +301,15 @@ function turnBannerMarkup() {
 
 function keyboardMarkup() {
   const bonus = game.phase === 'bonus-pick'
-  const consonantsChosen = game.bonusLetters.filter((l) => !VOWELS.includes(l)).length
-  const vowelsChosen = game.bonusLetters.filter((l) => VOWELS.includes(l)).length
+  const remaining = bonusLettersRemaining(game)
   const enabled = (letter) => {
     if (spinning) return false
-    if (bonus) return !'RSTLNE'.includes(letter) && !game.bonusLetters.includes(letter) && (VOWELS.includes(letter) ? vowelsChosen < 1 : consonantsChosen < 3)
+    if (bonus) return !'RSTLNE'.includes(letter) && !game.bonusLetters.includes(letter) && (VOWELS.includes(letter) ? remaining.vowels > 0 : remaining.consonants > 0)
     if (game.phase !== 'playing' || game.usedLetters.includes(letter)) return false
     return vowelMode ? VOWELS.includes(letter) : game.action === 'consonant' && !VOWELS.includes(letter)
   }
   return `<section class="keyboard-section" aria-label="${bonus ? 'Choose bonus letters' : 'Choose a letter'}">
-    <div class="keyboard-heading"><h3>${bonus ? 'Make those four letters count.' : vowelMode ? 'A little help for $250.' : game.action === 'consonant' ? 'Trust your letter instinct.' : 'Your next lucky letter?'}</h3><span>${bonus ? `${consonantsChosen}/3 consonants · ${vowelsChosen}/1 vowel` : vowelMode ? 'PICK A VOWEL' : 'PICK A CONSONANT'}</span></div>
+    <div class="keyboard-heading"><h3>${bonus ? 'Make those four letters count.' : vowelMode ? 'A little help for $250.' : game.action === 'consonant' ? 'Trust your letter instinct.' : 'Your next lucky letter?'}</h3><span>${bonus ? `${remaining.consonants} CONSONANT${remaining.consonants === 1 ? '' : 'S'} LEFT · ${remaining.vowels} VOWEL${remaining.vowels === 1 ? '' : 'S'} LEFT` : vowelMode ? 'PICK A VOWEL' : 'PICK A CONSONANT'}</span></div>
     <div class="keyboard">${['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'].map((row) => `<div class="keyboard-row">${[...row].map((letter) => {
       const used = bonus ? 'RSTLNE'.includes(letter) || game.bonusLetters.includes(letter) : game.usedLetters.includes(letter)
       return `<button class="letter-key ${used ? 'used' : ''} ${VOWELS.includes(letter) ? 'vowel' : ''}" data-letter="${letter}" ${enabled(letter) ? '' : 'disabled'} aria-label="${letter}${used ? ', already chosen' : ''}">${letter}</button>`
@@ -327,7 +326,7 @@ function playingControls() {
     <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingTrip ? `<strong>${escape(game.pendingTrip.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
-    <p class="wheel-note">${game.round === 3 ? '<strong class="double-stakes-note">DOUBLE STAKES · ALL CASH WEDGES PAY 2×</strong>' : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip') ? ' · trip surprises in play' : ''}</p>
+    <p class="wheel-note">${game.round === FINAL_ROUND ? '<strong class="double-stakes-note">DOUBLE STAKES · ALL CASH WEDGES PAY 2×</strong>' : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip') ? ' · trip surprises in play' : ''}</p>
   </section>`
 }
 
@@ -336,18 +335,19 @@ const confettiMarkup = () => `<div class="confetti" aria-hidden="true">${Array.f
 
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((trip) => `<div>${icon('plane')}<span><strong>${escape(trip.label)}</strong><small>${escape(trip.note)}</small></span><b>${money(trip.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === 3 ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((trip) => `<div>${icon('plane')}<span><strong>${escape(trip.label)}</strong><small>${escape(trip.note)}</small></span><b>${money(trip.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {
   const spinningWheel = game.phase === 'bonus-spin'
   const picking = game.phase === 'bonus-pick'
+  const remaining = bonusLettersRemaining(game)
   const prizeBlock = spinningWheel
     ? `${wheelMarkup()}<p>Six sealed envelopes. One is yours.<br>Spin to lock in your mystery prize.</p><button class="button button-primary" id="bonus-spin" ${spinning ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Sealing your envelope…' : 'Spin for the mystery prize'}</button>`
     : `<div class="prize-amount mystery-prize">${icon('gift')}<span>ENVELOPE ${game.bonusSpin?.slot ?? '?'} · MYSTERY PRIZE</span></div>`
   return `<section class="bonus-card"><span class="celebration-icon" aria-hidden="true">${icon('trophy')}</span><span class="card-eyebrow">ONE LAST MOMENT OF MAGIC</span><h2>${escape(game.players[game.champion].name)},<br>this is your shot.</h2>
     ${prizeBlock}
-    ${spinningWheel ? '' : picking ? `<div class="bonus-clock" id="pick-clock" role="timer" aria-label="Time remaining to pick letters"><span id="pick-seconds">${BONUS_PICK_SECONDS}</span><small>SECONDS TO PICK</small></div><p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve to win cash, a car, or a dream getaway. We’ll open your envelope either way!</p>` : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
+    ${spinningWheel ? '' : picking ? `<div class="bonus-clock" id="pick-clock" role="timer" aria-label="Time remaining to pick letters"><span id="pick-seconds">${BONUS_PICK_SECONDS}</span><small>SECONDS TO PICK</small></div><p class="bonus-remaining" role="status">Still to pick: <strong>${remaining.consonants} consonant${remaining.consonants === 1 ? '' : 's'}</strong> and <strong>${remaining.vowels} vowel${remaining.vowels === 1 ? '' : 's'}</strong>.</p><p>We’ll give you <strong>R S T L N E</strong>.<br>Pick 3 more consonants and 1 vowel.<br>Solve to win cash, a car, or a dream getaway. We’ll open your envelope either way!</p>` : `<div class="bonus-clock" role="timer" aria-label="Time remaining"><span id="seconds-left">${BONUS_SECONDS}</span><small>SECONDS TO SOLVE</small></div><form id="bonus-form"><label class="sr-only" for="bonus-answer">Your bonus puzzle answer</label><input class="answer-input" id="bonus-answer" autocomplete="off" spellcheck="false" placeholder="Your winning answer…" maxlength="100" required><button class="button button-primary" type="submit">Lock in my answer ${icon('arrow')}</button></form>`}
   </section>`
 }
 
@@ -373,8 +373,8 @@ function renderGame() {
   }
   const bonus = ['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   shell(`<section class="game-shell">
-    <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / 3</span>${game.round === 3 ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of 3`}">${[1, 2, 3].map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
-    ${!bonus && game.round === 3 ? '<div class="double-stakes-banner" role="status"><strong>DOUBLE STAKES</strong><span>Every cash wedge pays 2× this round.</span></div>' : ''}
+    <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / ${FINAL_ROUND}</span>${game.round === FINAL_ROUND ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of ${FINAL_ROUND}`}">${Array.from({ length: FINAL_ROUND }, (_, i) => i + 1).map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
+    ${!bonus && game.round === FINAL_ROUND ? '<div class="double-stakes-banner" role="status"><strong>DOUBLE STAKES</strong><span>Every cash wedge pays 2× this round.</span></div>' : ''}
     ${playerMarkup()}
     ${turnBannerMarkup()}
     <div class="turn-message" role="status" aria-live="polite"><span class="status-spark" aria-hidden="true">✳</span><span>${spinning ? 'A little suspense is part of the fun. Hold tight…' : escape(game.message)}</span></div>
@@ -434,32 +434,59 @@ function act(action) {
   }
 }
 
+// On phones the wheel takes over the screen in a modal so the spin is easy to follow.
+function openSpinModal(title) {
+  let dialog = document.querySelector('#spin-modal')
+  if (!dialog) {
+    dialog = document.createElement('dialog')
+    dialog.id = 'spin-modal'
+    dialog.className = 'spin-modal'
+    document.body.append(dialog)
+  }
+  dialog.innerHTML = `<div class="spin-modal-card" role="status"><span class="card-eyebrow">${escape(title)}</span>${wheelMarkup()}<p>Round and round we go…</p></div>`
+  if (!dialog.open) dialog.showModal()
+  return dialog
+}
+
+function closeSpinModal() {
+  const dialog = document.querySelector('#spin-modal')
+  if (!dialog) return
+  if (dialog.open) dialog.close()
+  dialog.remove()
+}
+
 function animateSpin(result, landedIndex, segmentCount, onSettle) {
   spinning = true
   renderGame()
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const duration = reduced ? 80 : 2800
-  // On phones the wheel grows while it spins, so bring it fully into view.
-  if (window.matchMedia('(max-width: 720px)').matches) {
-    document.querySelector('.wheel-wrap')?.scrollIntoView({
-      block: 'center', behavior: reduced ? 'instant' : 'smooth',
-    })
+  const onPhone = window.matchMedia('(max-width: 720px)').matches
+  if (onPhone) {
+    openSpinModal(result.phase === 'bonus-pick' ? 'SEALING YOUR ENVELOPE' : 'HERE WE GO')
   }
   const target = (360 - landedIndex * (360 / segmentCount)) % 360
   const current = ((wheelAngle % 360) + 360) % 360
   wheelAngle += 360 * 5 + ((target - current + 360) % 360)
-  const wheel = document.querySelector('.wheel-disc')
+  const wheels = [...document.querySelectorAll('.wheel-disc')]
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (!wheel) return
-    wheel.style.transition = `transform ${duration}ms cubic-bezier(.15,.75,.13,1)`
-    wheel.style.transform = `rotate(${wheelAngle}deg)`
+    wheels.forEach((wheel) => {
+      wheel.style.transition = `transform ${duration}ms cubic-bezier(.15,.75,.13,1)`
+      wheel.style.transform = `rotate(${wheelAngle}deg)`
+    })
   }))
   tone(320, 0.12)
   setTimeout(() => {
+    closeSpinModal()
     game = result
     spinning = false
     onSettle()
     renderGame()
+    // The wheel grows on phones once it settles, so bring the result into view.
+    if (onPhone) {
+      document.querySelector('.wheel-wrap')?.scrollIntoView({
+        block: 'center', behavior: reduced ? 'instant' : 'smooth',
+      })
+    }
   }, duration + 60)
 }
 
@@ -615,8 +642,8 @@ function showHelp() {
     <li><strong>Vowels are $250.</strong> Buy one before spinning if you have enough round cash. They don’t earn cash, and a miss still costs a turn.</li>
     <li><strong>Watch those tricky wedges.</strong> Round one has a single Bankrupt, and Bankrupt never lands twice in a row. Bankrupt wipes your current round cash and any held trips. Lose a Turn leaves your money alone. Both pass the turn.</li>
     <li><strong>Chase the trip surprises.</strong> The wheel grows each round, and from round two a Trip wedge reveals a surprise getaway. Claim it with a matching consonant and solve that round to bank it. Once claimed, that wedge becomes cash for the rest of the round, even if the trip is later lost.</li>
-    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. Round 3 doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
-    <li><strong>Finish with a flourish.</strong> After 3 rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for hidden cash, a car, a world trip, or a cabin. The bonus puzzle stays covered until your envelope is locked in. Start with R S T L N E, then pick 3 consonants and a vowel within ${BONUS_PICK_SECONDS} seconds; if that clock runs out you solve with the letters you have. You then have ${BONUS_SECONDS} seconds and one guess to win it. The envelope opens even if you miss or run out of time.</li>
+    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. The final round doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
+    <li><strong>Finish with a flourish.</strong> After ${FINAL_ROUND} rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for hidden cash, a car, a world trip, or a cabin. The bonus puzzle stays covered until your envelope is locked in. Start with R S T L N E, then pick 3 consonants and a vowel within ${BONUS_PICK_SECONDS} seconds; if that clock runs out you solve with the letters you have. You then have ${BONUS_SECONDS} seconds and one guess to win it. The envelope opens even if you miss or run out of time.</li>
     <li><strong>Keep the memories.</strong> Names and completed game scores save on this device. Visit History for past games and total scores by name. Unfinished games are not saved.</li>
   </ol><p class="fair-play-note">Friendly house rules, original puzzles, pretend money. An independent fan-made game, not affiliated with the television show.</p><button class="button button-primary" data-close>Sounds like game night ${icon('arrow')}</button>`)
 }
@@ -627,6 +654,7 @@ function confirmNewGame() {
 }
 
 function reset() {
+  closeSpinModal()
   clearInterval(bonusTimer)
   clearInterval(pickTimer)
   clearInterval(turnTimer)

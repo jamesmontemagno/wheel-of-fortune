@@ -5,8 +5,12 @@ const BONUS_GIVEN = 'RSTLNE';
 const VOWEL_COST = 250;
 
 export const TURN_SECONDS = 30;
-export const BONUS_SECONDS = 20;
+export const BONUS_SECONDS = 30;
 export const BONUS_PICK_SECONDS = 60;
+
+// The bonus player picks this many extra letters on top of R S T L N E.
+export const BONUS_CONSONANTS = 3;
+export const BONUS_VOWELS = 1;
 
 const freezeWheel = (segments) => Object.freeze(segments.map(Object.freeze));
 
@@ -60,7 +64,30 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '950', type: 'cash', value: 950 },
     { label: '2,000', type: 'cash', value: 2000 },
   ]),
+  freezeWheel([
+    { label: '800', type: 'cash', value: 800 },
+    { label: '1,000', type: 'cash', value: 1000 },
+    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,200', type: 'cash', value: 1200 },
+    { label: 'TRIP', type: 'trip', value: 900 },
+    { label: '900', type: 'cash', value: 900 },
+    { label: '5,000', type: 'cash', value: 5000 },
+    { label: 'LOSE TURN', type: 'lose-turn', value: 0 },
+    { label: '1,100', type: 'cash', value: 1100 },
+    { label: '1,600', type: 'cash', value: 1600 },
+    { label: 'TRIP', type: 'trip', value: 900 },
+    { label: '850', type: 'cash', value: 850 },
+    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,400', type: 'cash', value: 1400 },
+    { label: '1,000', type: 'cash', value: 1000 },
+    { label: '2,500', type: 'cash', value: 2500 },
+    { label: '1,300', type: 'cash', value: 1300 },
+    { label: '950', type: 'cash', value: 950 },
+  ]),
 ]);
+
+// The last main round before the bonus round.
+export const FINAL_ROUND = ROUND_WHEELS.length;
 
 // Kept for the lobby preview and as the opening-round wheel.
 export const WHEEL_SEGMENTS = ROUND_WHEELS[0];
@@ -171,7 +198,7 @@ function passTurn(game) {
 }
 
 // A full game uses one puzzle per round plus the bonus puzzle.
-export const PUZZLES_PER_GAME = 4;
+export const PUZZLES_PER_GAME = FINAL_ROUND + 1;
 
 // Puzzles played in earlier games are skipped until the bank can no longer fill a game.
 export function usablePuzzleHistory(seenPuzzleIds) {
@@ -240,7 +267,7 @@ export function spinWheel(game, rng = Math.random) {
   game.lastSpin = { index, ...segment };
   game.pendingTrip = null;
   if (segment.type === 'cash' || segment.type === 'trip') {
-    game.pendingValue = segment.value * (game.round === 3 ? 2 : 1);
+    game.pendingValue = segment.value * (game.round === FINAL_ROUND ? 2 : 1);
     game.action = 'consonant';
     startClock(game);
     if (segment.type === 'trip') {
@@ -334,7 +361,7 @@ export function nextRound(game, rng = Math.random) {
   requireCondition(game.phase === 'round-end', 'Finish the current round first.');
   let champion = null;
   let tied = false;
-  if (game.round === 3) {
+  if (game.round === FINAL_ROUND) {
     const highest = Math.max(...game.players.map((player) => player.total));
     const leaders = game.players
       .map((player, index) => (player.total === highest ? index : null))
@@ -355,7 +382,7 @@ export function nextRound(game, rng = Math.random) {
   game.roundPrizes = [];
   game.claimedTripIndices = [];
   startClock(game);
-  if (game.round < 3) {
+  if (game.round < FINAL_ROUND) {
     game.round += 1;
     const lowest = Math.min(...game.players.map((player) => player.total));
     const rotationStart = (game.round - 1) % game.players.length;
@@ -364,7 +391,7 @@ export function nextRound(game, rng = Math.random) {
       (_, offset) => (rotationStart + offset) % game.players.length,
     ).find((index) => game.players[index].total === lowest);
     game.phase = 'playing';
-    game.message = `Round ${game.round}${game.round === 3 ? ': double wheel values' : ''}! A bigger wheel with ${wheelForRound(game.round).length} spaces is in play. ${game.players[game.activePlayer].name}, you start.`;
+    game.message = `Round ${game.round}${game.round === FINAL_ROUND ? ': double wheel values' : ''}! A bigger wheel with ${wheelForRound(game.round).length} spaces is in play. ${game.players[game.activePlayer].name}, you start.`;
   } else {
     game.champion = champion;
     game.activePlayer = champion;
@@ -393,8 +420,23 @@ export function spinBonusWheel(game, rng = Math.random) {
   game.bonusPrizeType = prize.type;
   game.bonusPrizeRevealed = false;
   game.phase = 'bonus-pick';
-  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until the bonus round ends. R S T L N E are given. Choose three consonants and one vowel within ${BONUS_PICK_SECONDS} seconds.`;
+  game.message = `Envelope ${game.bonusSpin.slot} is locked in and stays sealed until the bonus round ends. R S T L N E are given. ${remainingLettersText(game)} You have ${BONUS_PICK_SECONDS} seconds to choose.`;
   return game;
+}
+
+// How many bonus consonants and vowels the champion still has to choose.
+export function bonusLettersRemaining(game) {
+  const picked = Array.isArray(game?.bonusLetters) ? game.bonusLetters : [];
+  const vowels = picked.filter((letter) => VOWELS.includes(letter)).length;
+  return {
+    consonants: Math.max(0, BONUS_CONSONANTS - (picked.length - vowels)),
+    vowels: Math.max(0, BONUS_VOWELS - vowels),
+  };
+}
+
+function remainingLettersText(game) {
+  const { consonants, vowels } = bonusLettersRemaining(game);
+  return `${consonants} consonant${consonants === 1 ? '' : 's'} and ${vowels} vowel${vowels === 1 ? '' : 's'} left to pick.`;
 }
 
 export function chooseBonusLetter(game, letter) {
@@ -405,15 +447,15 @@ export function chooseBonusLetter(game, letter) {
   const vowel = VOWELS.includes(choice);
   const sameTypeCount = game.bonusLetters.filter((picked) => VOWELS.includes(picked) === vowel).length;
   requireCondition(
-    sameTypeCount < (vowel ? 1 : 3),
+    sameTypeCount < (vowel ? BONUS_VOWELS : BONUS_CONSONANTS),
     vowel ? 'Choose only one bonus vowel.' : 'Choose only three bonus consonants.',
   );
   game.bonusLetters.push(choice);
-  if (game.bonusLetters.length === 4) {
+  if (game.bonusLetters.length === BONUS_CONSONANTS + BONUS_VOWELS) {
     game.phase = 'bonus-solve';
-    game.message = 'Your letters are revealed. You have 20 seconds to solve the bonus puzzle!';
+    game.message = `Your letters are revealed. You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
   } else {
-    game.message = 'Choose three consonants and one vowel in total.';
+    game.message = `${choice} is in. ${remainingLettersText(game)}`;
   }
   return game;
 }

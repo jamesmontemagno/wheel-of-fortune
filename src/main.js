@@ -81,10 +81,14 @@ function wheelMarkup(preview = false, segments = activeWheel()) {
         : segment.type === 'mystery' ? (index % 2 ? '#3f6f57' : '#d8b25f')
           : colors[index % colors.length]
     const ink = segment.type === 'bankrupt' || segment.type === 'trip' ? '#fff9ed' : segment.type === 'mystery' ? '#fffdf0' : '#243f35'
-    const fontSize = segment.type === 'mystery' ? 22 : segment.type === 'cash' ? (size > 14 ? 11 : 13) : 9
+    const fontSize = segment.type === 'mystery' ? 22 : segment.type === 'cash' ? (size > 14 ? 13 : 15) : 12
+    // Labels run along the length of the wedge (rim towards the hub) so they read the long way.
+    const labelMarkup = segment.type === 'mystery'
+      ? `<text x="160" y="48" transform="rotate(${index * angle} 160 160)" text-anchor="middle" fill="${ink}" font-size="${fontSize}" font-weight="800">${escape(label)}</text>`
+      : `<text x="22" y="160" transform="rotate(${index * angle + 90} 160 160)" text-anchor="start" dominant-baseline="central" fill="${ink}" font-size="${fontSize}" font-weight="800" letter-spacing="0.5">${escape(label)}</text>`
     return `<g>
       <path d="M160 160 L${start.join(' ')} A151 151 0 0 1 ${end.join(' ')} Z" fill="${fill}" stroke="#fff8e9" stroke-width="1.5"/>
-      <text x="160" y="48" transform="rotate(${index * angle} 160 160)" text-anchor="middle" fill="${ink}" font-size="${fontSize}" font-weight="800">${escape(label)}</text>
+      ${labelMarkup}
     </g>`
   }).join('')
   return `<div class="wheel-wrap ${preview ? 'wheel-preview' : ''}">

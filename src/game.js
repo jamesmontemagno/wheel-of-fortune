@@ -7,7 +7,13 @@ const VOWEL_COST = 250;
 
 export const TURN_SECONDS = 30;
 export const BONUS_SECONDS = 45;
-export const BONUS_PICK_SECONDS = 60;
+export const BONUS_PICK_SECONDS = 45;
+
+// A short countdown runs between the letter reveal and the solve clock.
+export const BONUS_COUNTDOWN_SECONDS = 5;
+
+// The champion chooses the bonus puzzle from this many different categories.
+export const BONUS_CATEGORY_CHOICES = 3;
 
 // The bonus player picks this many extra letters on top of R S T L N E.
 export const BONUS_CONSONANTS = 3;
@@ -167,6 +173,20 @@ function pickPuzzle(usedIds, rng, eligible = () => true) {
   return { ...candidates[randomIndex(candidates.length, rng)] };
 }
 
+// Three bonus-eligible puzzles, each from a different category, for the champion to choose from.
+function pickBonusCategoryOptions(usedIds, rng) {
+  const available = PUZZLES.filter((puzzle) => !usedIds.includes(puzzle.id) && isBonusPuzzleEligible(puzzle));
+  requireCondition(available.length > 0, 'No unused puzzles remain.');
+  const categories = [...new Set(available.map((puzzle) => puzzle.category))];
+  const options = [];
+  while (options.length < BONUS_CATEGORY_CHOICES && categories.length > 0) {
+    const [category] = categories.splice(randomIndex(categories.length, rng), 1);
+    const candidates = available.filter((puzzle) => puzzle.category === category);
+    options.push({ ...candidates[randomIndex(candidates.length, rng)] });
+  }
+  return options;
+}
+
 function parseLetter(letter) {
   requireCondition(typeof letter === 'string', 'Choose a single letter.');
   const normalized = letter.trim().toUpperCase();
@@ -252,6 +272,8 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     roundWinner: null,
     champion: null,
     bonusLetters: [],
+    bonusCategoryOptions: [],
+    bonusCategory: null,
     bonusPrize: 25000,
     bonusWon: null,
     usedPuzzleIds: [...seen, puzzle.id],
@@ -263,6 +285,7 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     turnSeconds: TURN_SECONDS,
     bonusSeconds: BONUS_SECONDS,
     bonusPickSeconds: BONUS_PICK_SECONDS,
+    bonusCountdownSeconds: BONUS_COUNTDOWN_SECONDS,
     bonusPrizeLabel: null,
     bonusPrizeNote: null,
     bonusPrizeType: null,
@@ -387,13 +410,11 @@ export function nextRound(game, rng = Math.random) {
     tied = leaders.length > 1;
     champion = leaders[tied ? randomIndex(leaders.length, rng) : 0];
   }
-  const puzzle = pickPuzzle(
-    game.usedPuzzleIds,
-    rng,
-    game.round === FINAL_ROUND ? isBonusPuzzleEligible : undefined,
-  );
+  const bonusOptions = game.round === FINAL_ROUND ? pickBonusCategoryOptions(game.usedPuzzleIds, rng) : [];
+  const puzzle = game.round === FINAL_ROUND ? bonusOptions[0] : pickPuzzle(game.usedPuzzleIds, rng);
   game.puzzle = puzzle;
-  game.usedPuzzleIds.push(puzzle.id);
+  // The bonus puzzle is only claimed once its category is chosen.
+  if (game.round !== FINAL_ROUND) game.usedPuzzleIds.push(puzzle.id);
   game.players.forEach((player) => { player.round = 0; player.trips = []; });
   game.usedLetters = [];
   game.action = 'spin';
@@ -420,6 +441,8 @@ export function nextRound(game, rng = Math.random) {
     game.tieBreak = tied;
     game.phase = 'bonus-spin';
     game.bonusLetters = [];
+    game.bonusCategoryOptions = bonusOptions;
+    game.bonusCategory = null;
     game.bonusWon = null;
     game.bonusPrizeLabel = null;
     game.bonusPrizeNote = null;
@@ -441,8 +464,28 @@ export function spinBonusWheel(game, rng = Math.random) {
   game.bonusPrizeNote = prize.note;
   game.bonusPrizeType = prize.type;
   game.bonusPrizeRevealed = false;
+  game.phase = 'bonus-category';
+  game.message = `Envelope ${game.bonusSpin.slot} is locked in. Choose one of ${game.bonusCategoryOptions.length} categories to set your bonus puzzle.`;
+  return game;
+}
+
+// The champion picks the bonus puzzle by category before any letters appear.
+export function bonusCategoryChoices(game) {
+  const options = Array.isArray(game?.bonusCategoryOptions) ? game.bonusCategoryOptions : [];
+  return options.map((option) => option.category);
+}
+
+export function chooseBonusCategory(game, category) {
+  requireCondition(game.phase === 'bonus-category', 'The bonus category choice is not open.');
+  requireCondition(typeof category === 'string', 'Choose a bonus category.');
+  const wanted = category.trim().toUpperCase();
+  const option = game.bonusCategoryOptions.find((choice) => choice.category.toUpperCase() === wanted);
+  requireCondition(Boolean(option), 'That category is not on offer.');
+  game.puzzle = { ...option };
+  game.usedPuzzleIds.push(option.id);
+  game.bonusCategory = option.category;
   game.phase = 'bonus-pick';
-  game.message = `Envelope ${game.bonusSpin.slot} is locked in. R S T L N E are given. ${remainingLettersText(game)} You have ${BONUS_PICK_SECONDS} seconds to choose; the board reveals all your letters together before the ${BONUS_SECONDS}-second solve.`;
+  game.message = `${option.category} it is! R S T L N E are already on the board. ${remainingLettersText(game)} You have ${BONUS_PICK_SECONDS} seconds to choose.`;
   return game;
 }
 
@@ -474,8 +517,8 @@ export function chooseBonusLetter(game, letter) {
   );
   game.bonusLetters.push(choice);
   if (game.bonusLetters.length === BONUS_CONSONANTS + BONUS_VOWELS) {
-    game.phase = 'bonus-solve';
-    game.message = `All your letters are revealed. You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
+    game.phase = 'bonus-countdown';
+    game.message = `All your letters are revealed. Take them in: the ${BONUS_SECONDS}-second solve starts in ${BONUS_COUNTDOWN_SECONDS} seconds.`;
   } else {
     game.message = `${choice} is in. ${remainingLettersText(game)}`;
   }
@@ -485,8 +528,16 @@ export function chooseBonusLetter(game, letter) {
 // Running out of pick time simply starts the solve with whatever letters were chosen.
 export function expireBonusPick(game) {
   requireCondition(game.phase === 'bonus-pick', 'Bonus letter selection is not open.');
+  game.phase = 'bonus-countdown';
+  game.message = `Time is up on your picks! All your letters are revealed. The ${BONUS_SECONDS}-second solve starts in ${BONUS_COUNTDOWN_SECONDS} seconds.`;
+  return game;
+}
+
+// The solve clock only starts once the short countdown finishes.
+export function startBonusSolve(game) {
+  requireCondition(game.phase === 'bonus-countdown', 'The bonus countdown is not running.');
   game.phase = 'bonus-solve';
-  game.message = `Time is up on your picks! All your letters are revealed. You have ${BONUS_SECONDS} seconds to solve the bonus puzzle!`;
+  game.message = `Go! You have ${BONUS_SECONDS} seconds and unlimited guesses to solve the bonus puzzle.`;
   return game;
 }
 
@@ -526,8 +577,9 @@ export function isLetterRevealed(game, letter) {
   const normalized = String(letter).toUpperCase();
   if (!/^[A-Z]$/.test(normalized)) return true;
   if (game.phase === 'round-end' || game.phase === 'game-over') return true;
-  if (game.phase === 'bonus-spin' || game.phase === 'bonus-pick') return false;
-  if (game.phase === 'bonus-solve') {
+  if (game.phase === 'bonus-spin' || game.phase === 'bonus-category') return false;
+  if (game.phase === 'bonus-pick') return BONUS_GIVEN_LETTERS.includes(normalized);
+  if (game.phase === 'bonus-countdown' || game.phase === 'bonus-solve') {
     return BONUS_GIVEN_LETTERS.includes(normalized) || game.bonusLetters.includes(normalized);
   }
   return game.usedLetters.includes(normalized);

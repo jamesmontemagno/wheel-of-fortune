@@ -14,6 +14,7 @@ const preferenceKeys = {
   players: 'wheel-of-wisdom.players',
 }
 await window.__wheelOfWisdomBridge.initialize()
+const isNativeHost = window.__wheelOfWisdomBridge.isNative
 const money = (value) => `$${value.toLocaleString('en-US')}`
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -60,7 +61,13 @@ const savedPlayers = [2, 3].includes(restoredPlayers?.count) &&
   : browserSavedPlayers
 let playerCount = savedPlayers.count
 let names = savedPlayers.names
-let history = storage.loadHistory()
+const browserHistory = storage.loadHistory()
+const nativeHistory = Array.isArray(window.__wheelOfWisdomBridge.state.history)
+  ? window.__wheelOfWisdomBridge.state.history
+  : []
+let history = [...new Map([...(isNativeHost ? nativeHistory : []), ...browserHistory]
+  .map((entry) => [entry.id, entry])).values()]
+  .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
 let seenPuzzleIds = usablePuzzleHistory(storage.loadSeenPuzzles())
 let gameId
 let gameRecorded = false
@@ -80,6 +87,12 @@ let turnKey = ''
 let turnRemaining = TURN_SECONDS * 1000
 let turnLastTick = 0
 let dialogReturnFocus
+
+if (isNativeHost && browserHistory.length) {
+  Promise.all(browserHistory.map((entry) => window.__wheelOfWisdomBridge.saveHistory(entry)))
+    .then(() => checkSaved(storage.clearHistory()))
+    .catch(() => checkSaved(false))
+}
 
 function activeWheel() {
   if (!game) return WHEEL_SEGMENTS
@@ -248,6 +261,8 @@ function checkSaved(success) {
   storageFailed = true
   const notice = document.querySelector('#storage-notice')
   if (notice) notice.textContent = 'Local saving is unavailable. New names and results will only last for this visit.'
+  const footnote = document.querySelector('.setup-footnote')
+  if (footnote && game?.phase === 'game-over') footnote.textContent = 'Results kept for this visit only.'
 }
 
 function savePlayers() {
@@ -258,8 +273,10 @@ function savePlayers() {
 }
 
 function renderHistory() {
-  history = [...new Map([...history, ...storage.loadHistory()].map((entry) => [entry.id, entry])).values()]
-    .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
+  if (!isNativeHost) {
+    history = [...new Map([...history, ...storage.loadHistory()].map((entry) => [entry.id, entry])).values()]
+      .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
+  }
   const scores = leaderboard(history)
   shell(`<section class="history-page" aria-labelledby="history-title">
     <span class="card-eyebrow">THE GAME-NIGHT HALL OF FAME</span>
@@ -279,7 +296,7 @@ function renderHistory() {
         </li>`).join('')}</ol>
       </section>
     </div>` : `<div class="history-card history-empty">${icon('trophy')}<h2>Your first chapter awaits.</h2><p>Finish a game to save the scores and start your leaderboard.</p></div>`}
-    <p class="history-note">Pretend prizes, real bragging rights. Clearing browser data removes saved names and history.</p>
+    <p class="history-note">Pretend prizes, real bragging rights. ${isNativeHost ? 'Game history is stored in this app’s local database.' : 'Clearing browser data removes saved names and history.'}</p>
   </section>`)
 }
 
@@ -396,7 +413,11 @@ function renderGame() {
   if (game.phase === 'game-over' && !gameRecorded) {
     history = recordGame(history, game, gameId)
     gameRecorded = true
-    checkSaved(storage.saveHistory(history))
+    if (isNativeHost) {
+      window.__wheelOfWisdomBridge.saveHistory(history[0]).catch(() => checkSaved(false))
+    } else {
+      checkSaved(storage.saveHistory(history))
+    }
   }
   const bonus = ['bonus-spin', 'bonus-pick', 'bonus-solve', 'game-over'].includes(game.phase)
   shell(`<section class="game-shell">

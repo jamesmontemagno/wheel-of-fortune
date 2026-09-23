@@ -44,7 +44,7 @@ public static class AppPreferences
         }
     }
 
-    public static string RestorePayload()
+    public static string RestorePayload(IReadOnlyList<GameHistoryEntry> history)
     {
         var values = new Dictionary<string, object?>
         {
@@ -52,7 +52,7 @@ public static class AppPreferences
             [PlayersKey] = GetPlayersPreference(),
         };
 
-        return JsonSerializer.Serialize(new { type = "restore", values });
+        return JsonSerializer.Serialize(new { type = "restore", values, history });
     }
 
     private static bool TryNormalizePlayers(string json, out string normalized)

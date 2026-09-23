@@ -29,8 +29,10 @@
       const mauiPreferencesReady = new Promise((resolve) => {
         resolveMauiPreferences = resolve;
       });
+      const pendingHistorySaves = new Map();
 
       window.__wheelOfWisdomBridge = {
+        isNative: false,
         state: {},
         async initialize() {
           await hybridWebViewReady;
@@ -39,6 +41,7 @@
             return;
           }
 
+          this.isNative = true;
           window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'requestRestore' }));
           await Promise.race([
             mauiPreferencesReady,
@@ -54,12 +57,36 @@
           }
           this.state[key] = value;
         },
-        applyState(payload) {
-          if (!payload || typeof payload !== 'object' || !payload.values) return;
-          Object.entries(payload.values).forEach(([key, value]) => {
-            this.state[key] = value;
+        saveHistory(entry) {
+          if (!window.HybridWebView) return Promise.resolve();
+          const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              pendingHistorySaves.delete(requestId);
+              reject(new Error('Timed out while saving game history.'));
+            }, 5000);
+            pendingHistorySaves.set(requestId, { resolve, reject, timeout });
+            window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'saveHistory', requestId, entry }));
           });
-          resolveMauiPreferences();
+        },
+        applyMessage(payload) {
+          if (!payload || typeof payload !== 'object') return;
+          if (payload.type === 'restore' && payload.values) {
+            Object.entries(payload.values).forEach(([key, value]) => {
+              this.state[key] = value;
+            });
+            this.state.history = Array.isArray(payload.history) ? payload.history : [];
+            resolveMauiPreferences();
+            return;
+          }
+          if (payload.type === 'historySaved' && typeof payload.requestId === 'string') {
+            const pending = pendingHistorySaves.get(payload.requestId);
+            if (!pending) return;
+            clearTimeout(pending.timeout);
+            pendingHistorySaves.delete(payload.requestId);
+            if (payload.success) pending.resolve();
+            else pending.reject(new Error('The native app could not save game history.'));
+          }
         },
       };
 
@@ -69,7 +96,7 @@
 
         try {
           const payload = JSON.parse(message);
-          window.__wheelOfWisdomBridge.applyState(payload);
+          window.__wheelOfWisdomBridge.applyMessage(payload);
         } catch (error) {
           console.error('Unable to read a message from the MAUI host.', error);
         }

@@ -69,6 +69,20 @@ export function createStorage(getStorage = () => globalThis.localStorage) {
       }
       return saved
     },
+    clearHistory() {
+      try {
+        const storage = getStorage()
+        const keys = []
+        for (let index = 0; index < storage.length; index += 1) {
+          const key = storage.key(index)
+          if (key?.startsWith(HISTORY_PREFIX)) keys.push(key)
+        }
+        keys.forEach((key) => storage.removeItem(key))
+        return true
+      } catch {
+        return false
+      }
+    },
   }
 }
 

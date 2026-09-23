@@ -9,6 +9,7 @@ function memoryStorage() {
     key: (index) => [...values.keys()][index] ?? null,
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
   }
 }
 
@@ -78,6 +79,16 @@ test('games saved from stale tabs never overwrite each other', () => {
   secondTab.saveHistory(recordGame(secondHistory, finishedGame(), 'two', '2026-09-21T12:00:00Z'))
   assert.deepEqual(firstTab.loadHistory().map((entry) => entry.id), ['two', 'one'])
   assert.equal(leaderboard(secondTab.loadHistory())[0].total, 102000)
+})
+
+test('history can be cleared after migration to native storage', () => {
+  const local = memoryStorage()
+  const storage = createStorage(() => local)
+  storage.savePlayers(2, ['Ada', 'Grace', ''])
+  storage.saveHistory(recordGame([], finishedGame(), 'one'))
+  assert.equal(storage.clearHistory(), true)
+  assert.deepEqual(storage.loadHistory(), [])
+  assert.deepEqual(storage.loadPlayers(), { count: 2, names: ['Ada', 'Grace', ''] })
 })
 
 test('leaderboard sums final scores by trimmed case-insensitive names, with safe keys', () => {

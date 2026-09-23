@@ -40,7 +40,8 @@ This repo also includes a native .NET MAUI wrapper at `mobile/WheelOfWisdom.Maui
 - `mobile/WheelOfWisdom.Maui` contains the .NET MAUI app shell.
 - `index.html`, `public/`, and `src/` are linked into `Resources/Raw/wwwroot` at build time, so the browser game remains the single source of truth and no generated web build is copied into the app.
 - `Preferences.Default` is used to persist the last sound setting and player state from the native app layer.
-- Browser builds continue using local storage, while the HybridWebView waits for native Preferences before initializing the lobby.
+- Completed game history is stored as validated, one-row-per-game records in a native SQLite database under `FileSystem.AppDataDirectory`.
+- Browser builds continue using local storage, while the HybridWebView waits for native Preferences and SQLite history before initializing the lobby. Existing HybridWebView local-storage history is migrated into SQLite on launch.
 
 Install the .NET 10 MAUI workload, then build a target from the repo root:
 

@@ -5,7 +5,8 @@ import {
   VOWELS, BONUS_GIVEN_LETTERS, BONUS_MAX_GIVEN_RATIO, createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick, revealBonusPrize,
   isLetterRevealed, isBonusPuzzleEligible, normalizeAnswer, usablePuzzleHistory, PUZZLES_PER_GAME, BONUS_PICK_SECONDS,
-  BONUS_SECONDS, FINAL_ROUND, bonusLettersRemaining,
+  BONUS_SECONDS, FINAL_ROUND, bonusLettersRemaining, chooseBonusCategory, startBonusSolve,
+  BONUS_CATEGORY_CHOICES, BONUS_COUNTDOWN_SECONDS, bonusCategoryChoices,
 } from '../src/game.js';
 import { PUZZLES } from '../src/puzzles.js';
 
@@ -34,12 +35,23 @@ const reachBonus = (names = ['Ada', 'Bo']) => {
     nextRound(game, fixed);
   }
   spinBonusWheel(game, fixed);
+  chooseBonusCategory(game, game.bonusCategoryOptions[0].category);
   return game;
 };
 const readyBonus = () => {
   const game = reachBonus();
   for (const letter of 'BCDA') chooseBonusLetter(game, letter);
+  startBonusSolve(game);
   return game;
+};
+// Draws the tie-break value first, then zeroes for the bonus category options.
+const firstDraw = (value) => {
+  let used = false;
+  return () => {
+    if (used) return 0;
+    used = true;
+    return value;
+  };
 };
 const sequence = (...values) => {
   let index = 0;
@@ -348,6 +360,18 @@ test('the bonus round spins a sealed mystery prize before letters are picked', (
   assert.equal(isBonusPuzzleEligible(game.puzzle), true);
   assertRejected(game, () => chooseBonusLetter(game, 'B'));
   assert.equal(spinBonusWheel(game, () => 0.999), game);
+  assert.equal(game.phase, 'bonus-category');
+  assert.equal(game.bonusCategoryOptions.length, BONUS_CATEGORY_CHOICES);
+  assert.equal(new Set(bonusCategoryChoices(game)).size, BONUS_CATEGORY_CHOICES);
+  assert.ok(game.bonusCategoryOptions.every(isBonusPuzzleEligible));
+  assertRejected(game, () => chooseBonusLetter(game, 'B'));
+  assertRejected(game, () => chooseBonusCategory(game, 'Not A Category'));
+  const chosen = game.bonusCategoryOptions.at(-1);
+  assert.equal(chooseBonusCategory(game, chosen.category.toLowerCase()), game);
+  assert.equal(game.puzzle.id, chosen.id);
+  assert.equal(game.bonusCategory, chosen.category);
+  assert.equal(game.usedPuzzleIds.at(-1), chosen.id);
+  assertRejected(game, () => chooseBonusCategory(game, chosen.category));
   assert.equal(game.phase, 'bonus-pick');
   assert.equal(game.bonusSpin.index, BONUS_WHEEL.length - 1);
   assert.equal(game.bonusPrize, BONUS_PRIZES.at(-1).value);
@@ -393,8 +417,10 @@ for (const [index, prize] of BONUS_PRIZES.entries()) {
       assert.equal(game.bonusPrizeNote, null);
       assert.equal(game.bonusPrizeType, null);
       spinBonusWheel(game, sequence(0, (index + 0.5) / BONUS_PRIZES.length));
+      chooseBonusCategory(game, game.bonusCategoryOptions[0].category);
       assert.equal(game.bonusPrizeRevealed, false);
       for (const letter of 'BCDA') chooseBonusLetter(game, letter);
+      startBonusSolve(game);
       assert.equal(game.bonusPrizeRevealed, false);
       const totals = game.players.map((player) => player.total);
       if (outcome === 'timeout') expireBonus(game);
@@ -840,7 +866,7 @@ test('ties draw only among leaders and explicitly announce the tie-break', () =>
     game.players[0].total = 3000;
     game.players[1].total = 2000;
     game.players[2].total = 3000;
-    nextRound(game, sequence(draw, 0, 0));
+    nextRound(game, firstDraw(draw));
     assert.equal(game.champion, winner);
     assert.equal(game.activePlayer, winner);
     assert.match(game.message, /tie-break.*random/i);
@@ -852,16 +878,16 @@ test('three-way tie is supported', () => {
   game.round = FINAL_ROUND;
   finishRound(game);
   game.players.forEach((player) => { player.total = 3000; });
-  nextRound(game, sequence(0, 0, 0));
+  nextRound(game, fixed);
   assert.equal(game.phase, 'bonus-spin');
   assert.equal(game.champion, 0);
   assert.equal(game.tieBreak, true);
 });
 
-test('bonus hides all chosen letters on the board until picking ends', () => {
+test('bonus shows the given letters while chosen letters stay hidden until picking ends', () => {
   const game = reachBonus();
   game.usedLetters.push('Z');
-  for (const char of 'RSTLNErstlne') assert.equal(isLetterRevealed(game, char), false);
+  for (const char of 'RSTLNErstlne') assert.equal(isLetterRevealed(game, char), true);
   for (const char of ' -!,') assert.equal(isLetterRevealed(game, char), true);
   assert.equal(isLetterRevealed(game, 'Z'), false);
   assert.equal(isLetterRevealed(game, 'B'), false);
@@ -870,7 +896,7 @@ test('bonus hides all chosen letters on the board until picking ends', () => {
   chooseBonusLetter(game, 'C');
   chooseBonusLetter(game, 'D');
   chooseBonusLetter(game, 'A');
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
   for (const char of 'RSTLNEBCDA') assert.equal(isLetterRevealed(game, char), true);
   assert.equal(isLetterRevealed(game, 'Z'), false);
 });
@@ -887,7 +913,7 @@ test('bonus rejects given letters, duplicates, malformed choices and excess vowe
   chooseBonusLetter(game, 'C');
   assert.equal(game.phase, 'bonus-pick');
   chooseBonusLetter(game, 'D');
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
 });
 
 test('bonus rejects a fourth consonant and starts solve only after the vowel', () => {
@@ -896,21 +922,25 @@ test('bonus rejects a fourth consonant and starts solve only after the vowel', (
   assert.equal(game.phase, 'bonus-pick');
   assertRejected(game, () => chooseBonusLetter(game, 'F'));
   chooseBonusLetter(game, 'A');
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
   assert.deepEqual(game.bonusLetters, ['B', 'C', 'D', 'A']);
-  assert.match(game.message, new RegExp(`${BONUS_SECONDS} seconds`));
+  assert.match(game.message, new RegExp(`${BONUS_COUNTDOWN_SECONDS} seconds`));
   assertRejected(game, () => chooseBonusLetter(game, 'I'));
+  assert.equal(startBonusSolve(game), game);
+  assert.equal(game.phase, 'bonus-solve');
+  assert.match(game.message, new RegExp(`${BONUS_SECONDS} seconds`));
+  assertRejected(game, () => startBonusSolve(game));
 });
 
-test('bonus board letters stay hidden during picks and reveal together when picks end', () => {
+test('bonus board reveals the given letters first and chosen letters when picks end', () => {
   const game = reachBonus();
-  for (const letter of BONUS_GIVEN_LETTERS) assert.equal(isLetterRevealed(game, letter), false);
+  for (const letter of BONUS_GIVEN_LETTERS) assert.equal(isLetterRevealed(game, letter), true);
   chooseBonusLetter(game, 'B');
   assert.equal(isLetterRevealed(game, 'B'), false);
   chooseBonusLetter(game, 'C');
   chooseBonusLetter(game, 'D');
   chooseBonusLetter(game, 'A');
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
   for (const letter of [...BONUS_GIVEN_LETTERS, ...game.bonusLetters]) {
     assert.equal(isLetterRevealed(game, letter), true);
   }
@@ -967,7 +997,7 @@ test('empty or malformed bonus answers leave the timer phase active', () => {
 });
 
 test('phase guards protect all actions outside their allowed phases', () => {
-  const phases = ['playing', 'round-end', 'bonus-pick', 'bonus-solve', 'game-over'];
+  const phases = ['playing', 'round-end', 'bonus-category', 'bonus-pick', 'bonus-countdown', 'bonus-solve', 'game-over'];
   const actions = [
     [['playing'], (game) => spin(game)],
     [['playing'], (game) => guessLetter(game, 'B')],
@@ -977,6 +1007,8 @@ test('phase guards protect all actions outside their allowed phases', () => {
     [['bonus-solve'], (game) => solveBonus(game, game.puzzle.phrase)],
     [['bonus-solve'], (game) => expireBonus(game)],
     [['bonus-pick'], (game) => expireBonusPick(game)],
+    [['bonus-countdown'], (game) => startBonusSolve(game)],
+    [['bonus-category'], (game) => chooseBonusCategory(game, 'Anything')],
   ];
   for (const phase of phases) {
     for (const [allowed, action] of actions) {
@@ -1030,8 +1062,11 @@ test('full three-player game runs through guesses, hazards, rounds and bonus', (
   }
   assert.equal(game.phase, 'bonus-spin');
   spinBonusWheel(game, fixed);
+  assert.equal(game.phase, 'bonus-category');
+  chooseBonusCategory(game, game.bonusCategoryOptions[0].category);
   assert.equal(game.phase, 'bonus-pick');
   for (const letter of 'BCDA') chooseBonusLetter(game, letter);
+  startBonusSolve(game);
   solveBonus(game, game.puzzle.phrase);
   assert.equal(game.phase, 'game-over');
   assert.equal(game.bonusWon, true);
@@ -1069,21 +1104,25 @@ test('bankrupt never lands twice in a row', () => {
   }
 });
 
-test('running out of pick time starts the bonus solve with the letters chosen', () => {
-  assert.equal(BONUS_PICK_SECONDS, 60);
+test('running out of pick time starts the bonus countdown with the letters chosen', () => {
+  assert.equal(BONUS_PICK_SECONDS, 45);
   const game = reachBonus();
   assert.equal(game.bonusPickSeconds, BONUS_PICK_SECONDS);
-  assert.equal(isLetterRevealed(game, 'R'), false);
+  assert.equal(game.bonusCountdownSeconds, BONUS_COUNTDOWN_SECONDS);
+  assert.equal(isLetterRevealed(game, 'R'), true);
   chooseBonusLetter(game, 'B');
   assert.equal(isLetterRevealed(game, 'B'), false);
   assert.equal(expireBonusPick(game), game);
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
   assert.deepEqual(game.bonusLetters, ['B']);
   assert.match(game.message, /time is up/i);
   assert.equal(isLetterRevealed(game, 'B'), true);
   assert.equal(isLetterRevealed(game, 'C'), false);
   assertRejected(game, () => chooseBonusLetter(game, 'C'));
   assertRejected(game, () => expireBonusPick(game));
+  assertRejected(game, () => solveBonus(game, game.puzzle.phrase));
+  startBonusSolve(game);
+  assert.equal(game.phase, 'bonus-solve');
   assert.equal(solveBonus(game, game.puzzle.phrase), game);
   assert.equal(game.bonusWon, true);
 });
@@ -1103,15 +1142,18 @@ test('the bonus round reports the consonants and vowels still to pick', () => {
   assert.deepEqual(bonusLettersRemaining(game), { consonants: 1, vowels: 0 });
   chooseBonusLetter(game, 'D');
   assert.deepEqual(bonusLettersRemaining(game), { consonants: 0, vowels: 0 });
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
+  startBonusSolve(game);
   assert.match(game.message, /45 seconds/);
 });
 
 test('the bonus pick clock can expire before any letters are chosen', () => {
   const game = reachBonus();
   expireBonusPick(game);
-  assert.equal(game.phase, 'bonus-solve');
+  assert.equal(game.phase, 'bonus-countdown');
   assert.deepEqual(game.bonusLetters, []);
+  startBonusSolve(game);
+  assert.equal(game.phase, 'bonus-solve');
   expireBonus(game);
   assert.equal(game.bonusWon, false);
 });

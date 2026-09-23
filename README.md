@@ -53,6 +53,10 @@ dotnet build mobile/WheelOfWisdom.Maui/WheelOfWisdom.Maui.csproj -f net10.0-andr
 
 - `.github/workflows/ci.yml` runs `npm test` and `npm run build` on pull requests and non-`main` branch pushes.
 - `.github/workflows/deploy.yml` tests, builds, and publishes `dist/` to GitHub Pages on every push to `main` (and on demand via *Run workflow*).
+- `.github/workflows/maui-android.yml` builds the Android app for relevant pull requests. A manual run can build a signed AAB when `build_release` is enabled.
+- `.github/workflows/maui-ios.yml` builds the iOS simulator app for relevant pull requests. A manual run can build a signed IPA and optionally upload it to TestFlight.
+
+Signed Android releases require the `ANDROID_KEYSTORE`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_ALIAS` repository secrets. Signed iOS releases use `APPSTORE_CERTIFICATE_P12`, `APPSTORE_CERTIFICATE_P12_PASSWORD`, `APPLE_IOS_APPSTORE_PROFILE`, and `APPSTORE_CODESIGN_KEY`; TestFlight additionally uses `APPLE_REFRACTORED_ISSUER_ID`, `APPLE_REFRACTORED_KEY_ID`, and `APPLE_REFRACTORED_P8_KEY`.
 
 Enable it once per repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 

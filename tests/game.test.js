@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  WHEEL_SEGMENTS, ROUND_WHEELS, BONUS_WHEEL, BONUS_PRIZES, TRIP_PRIZES, TURN_SECONDS, wheelForRound, wheelForGame,
+  WHEEL_SEGMENTS, ROUND_WHEELS, BONUS_WHEEL, BONUS_PRIZES, TRIP_PRIZES, MYSTERY_PRIZES, TURN_SECONDS, wheelForRound, wheelForGame,
   VOWELS, BONUS_GIVEN_LETTERS, BONUS_MAX_GIVEN_RATIO, createGame, spinWheel, guessLetter, solvePuzzle, expireTurn,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick, revealBonusPrize,
   isLetterRevealed, isBonusPuzzleEligible, normalizeAnswer, usablePuzzleHistory, PUZZLES_PER_GAME, BONUS_PICK_SECONDS,
@@ -89,7 +89,7 @@ test('bonus puzzle candidates stay at or below the 30 percent given-letter limit
   }
 });
 
-test('round wheels grow each round, keep hazards, and add trip surprises', () => {
+test('round wheels grow each round, keep hazards, and add trip and mystery surprises', () => {
   assert.equal(VOWELS, 'AEIOU');
   assert.equal(WHEEL_SEGMENTS, ROUND_WHEELS[0]);
   assert.equal(WHEEL_SEGMENTS.length, 12);
@@ -101,14 +101,15 @@ test('round wheels grow each round, keep hazards, and add trip surprises', () =>
     if (round > 1) assert.ok(wheel.length > wheelForRound(round - 1).length);
     assert.equal(wheel.filter((s) => s.type === 'lose-turn').length, 1);
     assert.ok([1, 2].includes(wheel.filter((s) => s.type === 'bankrupt').length));
-    assert.equal(wheel.filter((s) => s.type === 'trip').length, Math.min(round - 1, 2));
+    assert.equal(wheel.filter((s) => s.type === 'trip').length, round === 1 ? 0 : 1);
+    assert.equal(wheel.filter((s) => s.type === 'mystery').length, round === 1 ? 0 : 1);
     const cash = wheel.filter((s) => s.type === 'cash').map((s) => s.value);
     assert.ok(Math.max(...cash) > (round === 1 ? 0 : Math.max(...wheelForRound(round - 1).filter((s) => s.type === 'cash').map((s) => s.value))));
     for (const segment of wheel) {
       assert.equal(typeof segment.label, 'string');
-      assert.ok(['cash', 'bankrupt', 'lose-turn', 'trip'].includes(segment.type));
+      assert.ok(['cash', 'bankrupt', 'lose-turn', 'trip', 'mystery'].includes(segment.type));
       assert.ok(Number.isFinite(segment.value));
-      assert.ok(['cash', 'trip'].includes(segment.type) ? segment.value > 0 && segment.value <= 5000 : segment.value === 0);
+      assert.ok(['cash', 'trip', 'mystery'].includes(segment.type) ? segment.value > 0 && segment.value <= 5000 : segment.value === 0);
     }
   }
   assert.equal(wheelForRound(0), ROUND_WHEELS[0]);
@@ -116,17 +117,28 @@ test('round wheels grow each round, keep hazards, and add trip surprises', () =>
   assert.equal(wheelForRound('2'), ROUND_WHEELS[1]);
 });
 
-test('trip and bonus prize catalogs are usable and positive', () => {
-  for (const prize of TRIP_PRIZES) {
-    assert.ok(prize.id && prize.label && prize.note);
-    assert.ok(prize.value > 0);
+test('trip, mystery, and bonus prize catalogs are usable, varied, and positive', () => {
+  assert.ok(TRIP_PRIZES.length >= 16);
+  assert.ok(MYSTERY_PRIZES.length >= 16);
+  assert.ok(BONUS_PRIZES.length >= 12);
+  for (const catalog of [TRIP_PRIZES, MYSTERY_PRIZES, BONUS_PRIZES]) {
+    assert.equal(new Set(catalog.map((prize) => prize.id)).size, catalog.length);
+    assert.equal(new Set(catalog.map((prize) => prize.label)).size, catalog.length);
+    for (const prize of catalog) {
+      assert.ok(prize.id && prize.label && prize.note);
+      assert.ok(prize.value > 0);
+    }
+    // Varied values keep every reveal a surprise.
+    assert.ok(new Set(catalog.map((prize) => prize.value)).size >= Math.ceil(catalog.length / 2));
   }
+  // Mystery wedges stay in everyday-prize territory.
+  for (const prize of MYSTERY_PRIZES) assert.ok(prize.value <= 5000);
+  assert.ok(Math.min(...TRIP_PRIZES.map((prize) => prize.value)) > Math.max(...MYSTERY_PRIZES.map((prize) => prize.value)));
   for (const prize of BONUS_PRIZES) {
-    assert.ok(prize.id && prize.label && prize.note);
-    assert.ok(['cash', 'car', 'trip', 'home'].includes(prize.type));
-    assert.ok(prize.value > 0);
+    assert.ok(['cash', 'car', 'trip', 'home', 'tech', 'experience'].includes(prize.type));
+    assert.ok(prize.value >= 10000);
   }
-  assert.deepEqual([...new Set(BONUS_PRIZES.map((prize) => prize.type))].sort(), ['car', 'cash', 'home', 'trip']);
+  assert.deepEqual([...new Set(BONUS_PRIZES.map((prize) => prize.type))].sort(), ['car', 'cash', 'experience', 'home', 'tech', 'trip']);
   assert.ok(BONUS_WHEEL.length >= 2);
   assert.ok(BONUS_WHEEL.every((segment) => segment.type === 'mystery'));
 });
@@ -163,42 +175,47 @@ test('turn expiry is rejected outside an active main-round turn', () => {
   assertRejected(bonus, () => expireTurn(bonus));
 });
 
-test('a trip wedge is claimed with a matching consonant and banked by the solver', () => {
+for (const wedge of ['trip', 'mystery']) {
+  test(`a ${wedge} wedge is claimed with a matching consonant and banked by the solver`, () => {
   const game = gameWith('BANANA BREAD');
   game.round = 2;
-  spin(game, 'trip');
+  spin(game, wedge);
   assert.equal(game.action, 'consonant');
-  assert.ok(game.pendingTrip);
-  assert.deepEqual(game.lastSpin.prize, game.pendingTrip);
-  const trip = { ...game.pendingTrip };
+  assert.ok(game.pendingPrize);
+  assert.deepEqual(game.lastSpin.prize, game.pendingPrize);
+  const prize = { ...game.pendingPrize };
+  assert.equal(prize.kind, wedge);
+  const catalog = wedge === 'trip' ? TRIP_PRIZES : MYSTERY_PRIZES;
+  assert.ok(catalog.some((entry) => entry.id === prize.id && entry.value === prize.value));
   guessLetter(game, 'B');
-  assert.equal(game.pendingTrip, null);
-  assert.deepEqual(game.players[0].trips, [trip]);
+  assert.equal(game.pendingPrize, null);
+  assert.deepEqual(game.players[0].prizes, [prize]);
   const cash = game.players[0].round;
   finishRound(game);
-  assert.equal(game.players[0].total, cash + trip.value);
-  assert.deepEqual(game.roundPrizes, [trip]);
-});
+  assert.equal(game.players[0].total, cash + prize.value);
+  assert.deepEqual(game.roundPrizes, [prize]);
+  });
+}
 
 for (const round of [2, 3]) {
   for (const [index, segment] of wheelForRound(round).entries()) {
-    if (segment.type !== 'trip') continue;
-    test(`round ${round} trip ${index} becomes cash only on a matching consonant`, () => {
+    if (segment.type !== 'trip' && segment.type !== 'mystery') continue;
+    test(`round ${round} ${segment.type} ${index} becomes cash only on a matching consonant`, () => {
       const game = gameWith();
       game.round = round;
       const base = structuredClone(wheelForRound(round));
       const draw = (index + 0.5) / base.length;
       spinWheel(game, sequence(draw, 0));
-      assert.deepEqual(game.claimedTripIndices, []);
+      assert.deepEqual(game.claimedPrizeIndices, []);
       assert.deepEqual(wheelForGame(game), base);
       assertRejected(game, () => guessLetter(game, '?'));
       guessLetter(game, 'Z');
-      assert.deepEqual(game.claimedTripIndices, []);
+      assert.deepEqual(game.claimedPrizeIndices, []);
       assert.deepEqual(wheelForGame(game), base);
 
       spinWheel(game, sequence(draw, 0));
       guessLetter(game, 'B');
-      assert.deepEqual(game.claimedTripIndices, [index]);
+      assert.deepEqual(game.claimedPrizeIndices, [index]);
       const effective = wheelForGame(game);
       assert.deepEqual(effective[index], {
         label: String(segment.value), type: 'cash', value: segment.value,
@@ -208,59 +225,61 @@ for (const round of [2, 3]) {
       effective.forEach((wedge, wedgeIndex) => {
         if (wedgeIndex !== index) assert.deepEqual(wedge, base[wedgeIndex]);
       });
-      const heldTrip = structuredClone(game.players[1].trips);
+      const heldPrize = structuredClone(game.players[1].prizes);
       // A removed trip is a cash spin and consumes no prize draw.
       spinWheel(game, sequence(draw));
       assert.equal(game.lastSpin.type, 'cash');
       assert.equal(game.lastSpin.value, segment.value);
       assert.equal(game.pendingValue, segment.value * (round === FINAL_ROUND ? 2 : 1));
-      assert.equal(game.pendingTrip, null);
+      assert.equal(game.pendingPrize, null);
       guessLetter(game, 'D');
-      assert.deepEqual(game.players[1].trips, heldTrip);
-      assert.deepEqual(game.claimedTripIndices, [index]);
+      assert.deepEqual(game.players[1].prizes, heldPrize);
+      assert.deepEqual(game.claimedPrizeIndices, [index]);
       spin(game, 'bankrupt');
-      assert.deepEqual(game.players[1].trips, []);
+      assert.deepEqual(game.players[1].prizes, []);
       assert.equal(game.players[1].round, 0);
-      assert.deepEqual(game.claimedTripIndices, [index]);
+      assert.deepEqual(game.claimedPrizeIndices, [index]);
       assert.equal(wheelForGame(game)[index].type, 'cash');
       spinWheel(game, sequence(draw));
-      assert.equal(game.pendingTrip, null);
+      assert.equal(game.pendingPrize, null);
       assert.equal(game.lastSpin.type, 'cash');
 
       for (const fresh of [gameWith(), gameWith()]) {
         fresh.round = round;
-        assert.deepEqual(fresh.claimedTripIndices, []);
+        assert.deepEqual(fresh.claimedPrizeIndices, []);
         assert.deepEqual(wheelForGame(fresh), base);
         spinWheel(fresh, sequence(draw, 0));
-        assert.ok(fresh.pendingTrip);
+        assert.ok(fresh.pendingPrize);
       }
       finishRound(game);
       nextRound(game, fixed);
-      assert.deepEqual(game.claimedTripIndices, []);
+      assert.deepEqual(game.claimedPrizeIndices, []);
       assert.deepEqual(wheelForGame(game), wheelForRound(game.round));
     });
   }
 }
 
-test('both final-round trip wedges can be claimed independently by different players', () => {
+test('the final-round trip and mystery wedges are claimed independently by different players', () => {
   const game = gameWith();
   game.round = FINAL_ROUND;
-  const indices = wheelForRound(FINAL_ROUND).flatMap((segment, index) => segment.type === 'trip' ? [index] : []);
+  const isPrize = (segment) => segment.type === 'trip' || segment.type === 'mystery';
+  const indices = wheelForRound(FINAL_ROUND).flatMap((segment, index) => isPrize(segment) ? [index] : []);
+  assert.equal(indices.length, 2);
   spin(game, 'trip');
   guessLetter(game, 'B');
-  assert.deepEqual(game.claimedTripIndices, [indices[0]]);
-  assert.equal(wheelForGame(game)[indices[1]].type, 'trip');
+  assert.equal(game.players[0].prizes[0].kind, 'trip');
+  assert.deepEqual(game.claimedPrizeIndices, [wheelForRound(FINAL_ROUND).findIndex((segment) => segment.type === 'trip')]);
   expireTurn(game);
-  spin(game, 'trip');
+  spin(game, 'mystery');
   guessLetter(game, 'D');
-  assert.deepEqual(game.claimedTripIndices, indices);
-  assert.equal(wheelForGame(game).filter((segment) => segment.type === 'trip').length, 0);
-  assert.equal(game.players[0].trips.length, 1);
-  assert.equal(game.players[1].trips.length, 1);
+  assert.equal(game.players[1].prizes[0].kind, 'mystery');
+  assert.deepEqual(game.claimedPrizeIndices.slice().sort((a, b) => a - b), indices);
+  assert.equal(wheelForGame(game).filter(isPrize).length, 0);
+  assert.equal(game.players[0].prizes.length, 1);
+  assert.equal(game.players[1].prizes.length, 1);
   spin(game, 'bankrupt');
-  assert.deepEqual(game.claimedTripIndices, indices);
-  assert.equal(wheelForGame(game).filter((segment) => segment.type === 'trip').length, 0);
-  assert.equal(game.players[0].trips.length, 1);
+  assert.equal(wheelForGame(game).filter(isPrize).length, 0);
+  assert.equal(game.players[0].prizes.length, 1);
 });
 
 for (const [name, action] of [
@@ -273,10 +292,10 @@ for (const [name, action] of [
     game.round = 2;
     spin(game, 'trip');
     action(game);
-    assert.equal(game.pendingTrip, null);
-    assert.deepEqual(game.claimedTripIndices, []);
+    assert.equal(game.pendingPrize, null);
+    assert.deepEqual(game.claimedPrizeIndices, []);
     assert.deepEqual(wheelForGame(game), wheelForRound(2));
-    assert.ok(game.players.every((player) => player.trips.length === 0));
+    assert.ok(game.players.every((player) => player.prizes.length === 0));
   });
 }
 
@@ -285,8 +304,8 @@ test('a missed consonant loses the pending trip and the turn', () => {
   game.round = 2;
   spin(game, 'trip');
   guessLetter(game, 'Z');
-  assert.equal(game.pendingTrip, null);
-  assert.deepEqual(game.players[0].trips, []);
+  assert.equal(game.pendingPrize, null);
+  assert.deepEqual(game.players[0].prizes, []);
   assert.equal(game.activePlayer, 1);
 });
 
@@ -298,9 +317,9 @@ test('a pending trip cannot be claimed by buying a vowel', () => {
   spin(game, 'trip');
   assertRejected(game, () => guessLetter(game, 'A'));
   guessLetter(game, 'B');
-  assert.equal(game.players[0].trips.length, 1);
+  assert.equal(game.players[0].prizes.length, 1);
   guessLetter(game, 'A');
-  assert.equal(game.players[0].trips.length, 1);
+  assert.equal(game.players[0].prizes.length, 1);
 });
 
 test('bankrupt clears held trips along with round winnings', () => {
@@ -308,11 +327,11 @@ test('bankrupt clears held trips along with round winnings', () => {
   game.round = 2;
   spin(game, 'trip');
   guessLetter(game, 'B');
-  assert.equal(game.players[0].trips.length, 1);
+  assert.equal(game.players[0].prizes.length, 1);
   game.activePlayer = 0;
   game.action = 'spin';
   spin(game, 'bankrupt');
-  assert.deepEqual(game.players[0].trips, []);
+  assert.deepEqual(game.players[0].prizes, []);
   assert.equal(game.players[0].round, 0);
 });
 
@@ -327,7 +346,7 @@ test('trips are cleared between rounds and are never awarded to a non-solver', (
   assert.deepEqual(game.roundPrizes, []);
   assert.equal(game.players[1].total, 1000);
   nextRound(game, fixed);
-  assert.ok(game.players.every((player) => player.trips.length === 0));
+  assert.ok(game.players.every((player) => player.prizes.length === 0));
   assert.deepEqual(game.roundPrizes, []);
 });
 
@@ -435,7 +454,7 @@ for (const [index, prize] of BONUS_PRIZES.entries()) {
 
 test('creation initializes the complete UI contract and trims names', () => {
   const game = createGame([' Ada ', 'Bo', 'Cy'], fixed);
-  assert.deepEqual(game.players, ['Ada', 'Bo', 'Cy'].map((name) => ({ name, total: 0, round: 0, trips: [] })));
+  assert.deepEqual(game.players, ['Ada', 'Bo', 'Cy'].map((name) => ({ name, total: 0, round: 0, prizes: [] })));
   assert.equal(game.activePlayer, 0);
   assert.equal(game.round, 1);
   assert.equal(game.phase, 'playing');
@@ -445,11 +464,11 @@ test('creation initializes the complete UI contract and trims names', () => {
   assert.equal(game.champion, null);
   assert.equal(game.lastSpin, null);
   assert.equal(game.bonusWon, null);
-  assert.equal(game.pendingTrip, null);
+  assert.equal(game.pendingPrize, null);
   assert.equal(game.bonusSpin, null);
   assert.equal(game.bonusPrizeNote, null);
   assert.equal(game.bonusPrizeType, null);
-  assert.deepEqual(game.claimedTripIndices, []);
+  assert.deepEqual(game.claimedPrizeIndices, []);
   assert.equal(game.turnSeconds, TURN_SECONDS);
   assert.deepEqual(game.roundPrizes, []);
   assert.ok(game.bonusPrize > 0);
@@ -551,7 +570,7 @@ test('every segment can be selected and lastSpin retains its base wheel value', 
       game.round = round;
       assert.equal(spinWheel(game, () => (index + 0.5) / wheel.length), game);
       const expected = { index, ...wheel[index] };
-      if (wheel[index].type === 'trip') expected.prize = { ...game.lastSpin.prize };
+      if (['trip', 'mystery'].includes(wheel[index].type)) expected.prize = { ...game.lastSpin.prize };
       assert.deepEqual(game.lastSpin, expected);
       assert.equal(game.pendingValue, wheel[index].value * (round === FINAL_ROUND ? 2 : 1));
     }

@@ -29,6 +29,7 @@ const icons = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   gift: '<rect x="3" y="9" width="18" height="12" rx="2"/><path d="M3 13h18M12 9v12M12 9C9 9 7 8 7 6.5A2.5 2.5 0 0 1 12 6a2.5 2.5 0 0 1 5 .5C17 8 15 9 12 9z"/>',
 }
+const prizeIcon = (prize) => (prize?.kind === 'mystery' ? 'gift' : 'plane')
 const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`
 const colors = ['#e7ab65', '#a8cdbb', '#e78371', '#f1d98a', '#a7bcd4', '#e9cb74', '#d0bbd9', '#e9ba76', '#aed0bd', '#dce1d8', '#e68b7a', '#aebfd7']
 
@@ -81,14 +82,16 @@ function wheelMarkup(preview = false, segments = activeWheel()) {
     const start = point(center - angle / 2, 151)
     const end = point(center + angle / 2, 151)
     const label = segment.type === 'cash' ? money(segment.value) : segment.label.toUpperCase()
+    const sealed = segment.type === 'mystery' && segment.label === '?'
     const fill = segment.type === 'bankrupt' ? '#283e36'
       : segment.type === 'trip' ? '#63a2c4'
-        : segment.type === 'mystery' ? (index % 2 ? '#3f6f57' : '#d8b25f')
-          : colors[index % colors.length]
-    const ink = segment.type === 'bankrupt' || segment.type === 'trip' ? '#fff9ed' : segment.type === 'mystery' ? '#fffdf0' : '#243f35'
-    const fontSize = segment.type === 'mystery' ? 22 : segment.type === 'cash' ? (size > 14 ? 13 : 15) : 12
+        : sealed ? (index % 2 ? '#3f6f57' : '#d8b25f')
+          : segment.type === 'mystery' ? '#8360a8'
+            : colors[index % colors.length]
+    const ink = ['bankrupt', 'trip', 'mystery'].includes(segment.type) ? '#fff9ed' : '#243f35'
+    const fontSize = sealed ? 22 : segment.type === 'cash' ? (size > 14 ? 13 : 15) : 12
     // Labels run along the length of the wedge (rim towards the hub) so they read the long way.
-    const labelMarkup = segment.type === 'mystery'
+    const labelMarkup = sealed
       ? `<text x="160" y="48" transform="rotate(${index * angle} 160 160)" text-anchor="middle" fill="${ink}" font-size="${fontSize}" font-weight="800">${escape(label)}</text>`
       : `<text x="22" y="160" transform="rotate(${index * angle + 90} 160 160)" text-anchor="start" dominant-baseline="central" fill="${ink}" font-size="${fontSize}" font-weight="800" letter-spacing="0.5">${escape(label)}</text>`
     return `<g>
@@ -99,7 +102,7 @@ function wheelMarkup(preview = false, segments = activeWheel()) {
   return `<div class="wheel-wrap ${preview ? 'wheel-preview' : ''}">
     <span class="wheel-pointer" aria-hidden="true"></span>
     <div class="wheel-outer">
-      <svg class="wheel-disc" viewBox="0 0 320 320" style="transform:rotate(${wheelAngle}deg)" role="img" aria-label="${segments === BONUS_WHEEL ? 'Mystery prize wheel with sealed envelopes' : 'Prize wheel with cash, trip surprises, Bankrupt, and Lose a Turn spaces'}">
+      <svg class="wheel-disc" viewBox="0 0 320 320" style="transform:rotate(${wheelAngle}deg)" role="img" aria-label="${segments === BONUS_WHEEL ? 'Mystery prize wheel with sealed envelopes' : 'Prize wheel with cash, trip and mystery surprises, Bankrupt, and Lose a Turn spaces'}">
         <circle cx="160" cy="160" r="159" fill="#264b3b"/>
         ${sectors}
         ${Array.from({ length: size }, (_, i) => {
@@ -246,7 +249,7 @@ function renderHistory() {
   shell(`<section class="history-page" aria-labelledby="history-title">
     <span class="card-eyebrow">THE GAME-NIGHT HALL OF FAME</span>
     <h1 id="history-title">Good times. Great scores.</h1>
-    <p class="history-note">Completed games, saved on this device. Scores include banked trips and won bonus prizes.</p>
+    <p class="history-note">Completed games, saved on this device. Scores include banked prizes and won bonus prizes.</p>
     ${history.length ? `<div class="history-layout">
       <section class="history-card" aria-labelledby="leaderboard-title"><h2 id="leaderboard-title">${icon('trophy')} Leaderboard</h2>
         <p class="history-note">Names are combined regardless of capitalization.</p>
@@ -309,7 +312,7 @@ function playerMarkup() {
     <div class="player-score color-${i} ${game.activePlayer === i ? 'active-player' : ''}">
       <div class="score-name"><span class="score-dot" aria-hidden="true"></span><span>${escape(player.name)}</span>${game.activePlayer === i ? '<span class="turn-tag">UP</span>' : ''}</div>
       <strong>${money(player.round)}</strong><span class="banked-label">BANKED <b>${money(player.total)}</b></span>
-      ${player.trips.length > 0 ? `<span class="trip-tag">${icon('plane')} ${player.trips.length} TRIP${player.trips.length === 1 ? '' : 'S'} HELD</span>` : ''}
+      ${player.prizes.length > 0 ? `<span class="prize-tag">${icon(prizeIcon(player.prizes[0]))} ${player.prizes.length} PRIZE${player.prizes.length === 1 ? '' : 'S'} HELD</span>` : ''}
     </div>`).join('')}</div>`
 }
 
@@ -347,10 +350,10 @@ function playingControls() {
   return `<section class="wheel-panel ${spinning ? 'spinning' : ''}" aria-label="Spin and actions">
     <div class="wheel-panel-heading"><span class="card-eyebrow">A LITTLE LUCK GOES A LONG WAY</span><span aria-hidden="true">✧</span></div>
     ${wheelMarkup()}
-    <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingTrip ? `<strong>${escape(game.pendingTrip.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
+    <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingPrize ? `<strong>${escape(game.pendingPrize.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
-    <p class="wheel-note">${game.round === FINAL_ROUND ? '<strong class="double-stakes-note">DOUBLE STAKES · ALL CASH WEDGES PAY 2×</strong>' : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip') ? ' · trip surprises in play' : ''}</p>
+    <p class="wheel-note">${game.round === FINAL_ROUND ? '<strong class="double-stakes-note">DOUBLE STAKES · ALL CASH WEDGES PAY 2×</strong>' : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip' || segment.type === 'mystery') ? ' · trip &amp; mystery surprises in play' : ''}</p>
   </section>`
 }
 
@@ -359,7 +362,7 @@ const confettiMarkup = () => `<div class="confetti" aria-hidden="true">${Array.f
 
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((trip) => `<div>${icon('plane')}<span><strong>${escape(trip.label)}</strong><small>${escape(trip.note)}</small></span><b>${money(trip.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="prize-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {
@@ -385,7 +388,7 @@ function bonusMarkup() {
 function finalMarkup() {
   const champion = game.players[game.champion]
   const rankings = game.players.map((p, i) => ({ ...p, index: i })).sort((a, b) => b.total - a.total || (a.index === game.champion ? -1 : b.index === game.champion ? 1 : a.index - b.index))
-  const prizeSymbol = { cash: '💵', car: '🚗', trip: '🌏', home: '🏡' }[game.bonusPrizeType] ?? '🎁'
+  const prizeSymbol = { cash: '💵', car: '🚗', trip: '🌏', home: '🏡', tech: '💻', experience: '🎟️' }[game.bonusPrizeType] ?? '🎁'
   const prize = game.bonusPrizeRevealed
     ? `<div class="envelope-reveal ${game.bonusWon ? 'bonus-win' : 'bonus-loss'}" aria-label="Opened bonus envelope">
         <div class="envelope-flap" aria-hidden="true"></div>
@@ -715,10 +718,10 @@ function showHelp() {
   showDialog('A good time, explained.', `<p>A pass-and-play word game for 2 or 3 people. Play together on this device; no accounts or connection needed after loading.</p><ol class="rules-list">
     <li><strong>Spin, then pick a consonant.</strong> Earn the wheel value for every matching letter. A miss passes the phone. You have ${TURN_SECONDS} seconds per turn; the clock pauses while the wheel spins or this window is open.</li>
     <li><strong>Vowels are $250.</strong> Buy one before spinning if you have enough round cash. They don’t earn cash, and a miss still costs a turn.</li>
-    <li><strong>Watch those tricky wedges.</strong> Round one has a single Bankrupt, and Bankrupt never lands twice in a row. Bankrupt wipes your current round cash and any held trips. Lose a Turn leaves your money alone. Both pass the turn.</li>
-    <li><strong>Chase the trip surprises.</strong> The wheel grows each round, and from round two a Trip wedge reveals a surprise getaway. Claim it with a matching consonant and solve that round to bank it. Once claimed, that wedge becomes cash for the rest of the round, even if the trip is later lost.</li>
-    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum. A wrong solve passes the turn. The final round doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
-    <li><strong>Finish with a flourish.</strong> After ${FINAL_ROUND} rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for hidden cash, a car, a world trip, or a cabin, then choose your puzzle from three categories. The bonus puzzle is chosen so no more than 30% of its letter tiles are in R S T L N E. R S T L N E appear on the board right away; pick 3 more consonants and a vowel within ${BONUS_PICK_SECONDS} seconds, and if that clock runs out you play the letters you have. Your letters fill in together, a ${BONUS_COUNTDOWN_SECONDS}-second countdown gets you ready, and then you have ${BONUS_SECONDS} seconds and unlimited guesses. A correct answer wins the prize; if time runs out, the bonus round is not won and you can click the envelope to reveal its prize.</li>
+    <li><strong>Watch those tricky wedges.</strong> Round one has a single Bankrupt, and Bankrupt never lands twice in a row. Bankrupt wipes your current round cash and any held prizes. Lose a Turn leaves your money alone. Both pass the turn.</li>
+    <li><strong>Chase the surprises.</strong> The wheel grows each round, and from round two it carries one Trip wedge and one Mystery wedge. Trip reveals a surprise getaway; Mystery reveals a fun prize for your home or hobby, worth up to $5,000. Claim either with a matching consonant and solve that round to bank it. Once claimed, that wedge becomes cash for the rest of the round, even if the prize is later lost.</li>
+    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum, plus any prizes they claimed. A wrong solve passes the turn. The final round doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
+    <li><strong>Finish with a flourish.</strong> After ${FINAL_ROUND} rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for a hidden envelope: cash, a car, a dream trip, a home upgrade, a tech setup, or a once-in-a-lifetime experience. Then choose your puzzle from three categories. The bonus puzzle is chosen so no more than 30% of its letter tiles are in R S T L N E. R S T L N E appear on the board right away; pick 3 more consonants and a vowel within ${BONUS_PICK_SECONDS} seconds, and if that clock runs out you play the letters you have. Your letters fill in together, a ${BONUS_COUNTDOWN_SECONDS}-second countdown gets you ready, and then you have ${BONUS_SECONDS} seconds and unlimited guesses. A correct answer wins the prize; if time runs out, the bonus round is not won and you can click the envelope to reveal its prize.</li>
     <li><strong>Keep the memories.</strong> Names and completed game scores save on this device. Visit History for past games and total scores by name. Unfinished games are not saved.</li>
   </ol><p class="fair-play-note">Friendly house rules, original puzzles, pretend money. An independent fan-made game, not affiliated with the television show.</p><button class="button button-primary" data-close>Sounds like game night ${icon('arrow')}</button>`)
 }

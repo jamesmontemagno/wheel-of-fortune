@@ -43,7 +43,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
     { label: '900', type: 'cash', value: 900 },
     { label: 'TRIP', type: 'trip', value: 600 },
-    { label: '650', type: 'cash', value: 650 },
+    { label: 'MYSTERY', type: 'mystery', value: 650 },
     { label: '3,000', type: 'cash', value: 3000 },
     { label: 'LOSE TURN', type: 'lose-turn', value: 0 },
     { label: '800', type: 'cash', value: 800 },
@@ -64,7 +64,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: 'LOSE TURN', type: 'lose-turn', value: 0 },
     { label: '1,000', type: 'cash', value: 1000 },
     { label: '1,500', type: 'cash', value: 1500 },
-    { label: 'TRIP', type: 'trip', value: 800 },
+    { label: 'MYSTERY', type: 'mystery', value: 850 },
     { label: '750', type: 'cash', value: 750 },
     { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
     { label: '1,300', type: 'cash', value: 1300 },
@@ -82,7 +82,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: 'LOSE TURN', type: 'lose-turn', value: 0 },
     { label: '1,100', type: 'cash', value: 1100 },
     { label: '1,600', type: 'cash', value: 1600 },
-    { label: 'TRIP', type: 'trip', value: 900 },
+    { label: 'MYSTERY', type: 'mystery', value: 950 },
     { label: '850', type: 'cash', value: 850 },
     { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
     { label: '1,400', type: 'cash', value: 1400 },
@@ -104,15 +104,18 @@ export function wheelForRound(round) {
   return ROUND_WHEELS[index];
 }
 
+// Trip and Mystery wedges both hide a surprise until someone claims them.
+export const isPrizeWedge = (segment) => segment.type === 'trip' || segment.type === 'mystery';
+
 export function wheelForGame(game) {
   return wheelForRound(game.round).map((segment, index) => (
-    segment.type === 'trip' && game.claimedTripIndices.includes(index)
+    isPrizeWedge(segment) && game.claimedPrizeIndices.includes(index)
       ? { label: segment.value.toLocaleString('en-US'), type: 'cash', value: segment.value }
       : segment
   ));
 }
 
-// Landing on a trip wedge reveals one of these surprises; solve the round to keep it.
+// Landing on a Trip wedge reveals one of these getaways; solve the round to keep it.
 export const TRIP_PRIZES = Object.freeze(
   [
     { id: 'reef', label: 'Coral Reef Snorkel Week', note: 'Warm water, warmer welcome.', value: 6000 },
@@ -123,18 +126,73 @@ export const TRIP_PRIZES = Object.freeze(
     { id: 'northern', label: 'Northern Lights Lodge', note: 'A sky that shows off.', value: 9500 },
     { id: 'canyon', label: 'Red Canyon Road Trip', note: 'Big rocks, bigger playlists.', value: 5500 },
     { id: 'lisbon', label: 'Lisbon Food Weekend', note: 'Pastries on every corner.', value: 6500 },
+    { id: 'rail', label: 'Mountain Rail Journey', note: 'Windows wide, watch the peaks roll by.', value: 7000 },
+    { id: 'reykjavik', label: 'Volcano and Hot Springs Week', note: 'Steam, stone, and long soaks.', value: 10000 },
+    { id: 'marrakech', label: 'Desert Market Adventure', note: 'Spice stalls, then stars over the dunes.', value: 8500 },
+    { id: 'patagonia', label: 'Patagonia Trekking Trip', note: 'Big wind, bigger views.', value: 12000 },
+    { id: 'riverboat', label: 'European Riverboat Cruise', note: 'A new little town every morning.', value: 13000 },
+    { id: 'vineyard', label: 'Vineyard Harvest Getaway', note: 'Long tables and longer sunsets.', value: 7200 },
+    { id: 'bayou', label: 'Jazz and Bayou Long Weekend', note: 'Brass bands and beignets.', value: 5400 },
+    { id: 'reefdive', label: 'Great Barrier Dive School', note: 'Learn to dive where the fish show off.', value: 14000 },
+    { id: 'lakehouse', label: 'Lakeside Cabin Summer Week', note: 'Dock, canoe, zero agenda.', value: 5200 },
+    { id: 'tokyo', label: 'Tokyo Neon City Break', note: 'Ramen at midnight, trains on time.', value: 10500 },
+    { id: 'galapagos', label: 'Galapagos Wildlife Voyage', note: 'Tortoises, penguins, and one very smug iguana.', value: 15000 },
+    { id: 'roadstrip', label: 'Coastal Highway Convertible Tour', note: 'Top down the whole way.', value: 6800 },
   ].map(Object.freeze),
 );
+
+// Landing on a Mystery wedge reveals one of these everyday treats, all under $5,000.
+export const MYSTERY_PRIZES = Object.freeze(
+  [
+    { id: 'espresso', label: 'Cafe-Grade Espresso Bar', note: 'Your kitchen just opened a coffee shop.', value: 1200 },
+    { id: 'vacuum', label: 'Robot Vacuum and Mop Duo', note: 'They clean while you nap.', value: 900 },
+    { id: 'hottub', label: 'Backyard Hot Tub', note: 'Six jets, zero worries.', value: 5000 },
+    { id: 'theater', label: 'Living Room Theater Setup', note: 'Big screen, bigger sound.', value: 4500 },
+    { id: 'ebike', label: 'A Pair of Electric Bikes', note: 'Hills are now optional.', value: 3000 },
+    { id: 'grill', label: 'Deluxe Grill and Patio Set', note: 'Summer cookouts, handled.', value: 1800 },
+    { id: 'mattress', label: 'Dream Mattress and Bedding', note: 'The best sleep of your life.', value: 2200 },
+    { id: 'pizza', label: 'Wood-Fired Pizza Oven', note: 'Ninety-second pizzas, all year.', value: 1000 },
+    { id: 'kitchen', label: 'Chef’s Kitchen Appliance Set', note: 'Mixer, blender, and every gadget.', value: 2600 },
+    { id: 'laundry', label: 'Smart Washer and Dryer Pair', note: 'Laundry day, only faster.', value: 2400 },
+    { id: 'garage', label: 'Complete Garage Tool Wall', note: 'Every tool, finally in its place.', value: 2800 },
+    { id: 'mower', label: 'Riding Lawn Mower', note: 'Mowing suddenly sounds fun.', value: 3500 },
+    { id: 'gaming', label: 'Ultimate Gaming Setup', note: 'Chair, console, and a very big monitor.', value: 2500 },
+    { id: 'camera', label: 'Photography Starter Kit', note: 'Camera, lenses, and a tripod.', value: 2000 },
+    { id: 'records', label: 'Turntable and Record Library', note: 'One hundred albums to spin.', value: 800 },
+    { id: 'kayaks', label: 'Two Kayaks and a Roof Rack', note: 'Paddle out before breakfast.', value: 1600 },
+    { id: 'furniture', label: 'New Living Room Furniture', note: 'Sofa, chairs, and a rug that ties it together.', value: 4200 },
+    { id: 'firepit', label: 'Fire Pit and Cozy Patio Nook', note: 'Marshmallows included.', value: 1400 },
+    { id: 'coffee', label: 'Coffee Delivered for a Year', note: 'A fresh bag every single month.', value: 600 },
+    { id: 'craft', label: 'Craft Studio Makeover', note: 'Sewing machine, bench, and all the supplies.', value: 1500 },
+    { id: 'sound', label: 'Whole-Home Speaker System', note: 'Music in every room, even the shower.', value: 3200 },
+    { id: 'fridge', label: 'Smart Refrigerator', note: 'It makes the good ice.', value: 4000 },
+    { id: 'gym', label: 'Home Gym in a Corner', note: 'Bike, weights, and a mirror that coaches.', value: 3800 },
+    { id: 'telescope', label: 'Backyard Telescope Kit', note: 'Saturn from your own lawn.', value: 700 },
+  ].map(Object.freeze),
+);
+
+// Each wedge type draws from its own catalog of surprises.
+const WEDGE_PRIZES = Object.freeze({ trip: TRIP_PRIZES, mystery: MYSTERY_PRIZES });
 
 // The bonus wheel hides these behind identical envelopes until the round ends.
 export const BONUS_PRIZES = Object.freeze(
   [
+    { id: 'starter', label: 'The Starter Cash Envelope', note: '$10,000 in cash to kick things off.', type: 'cash', value: 10000 },
     { id: 'classic', label: 'The Classic Cash Envelope', note: '$25,000 in cash for your next big idea.', type: 'cash', value: 25000 },
     { id: 'golden', label: 'The Golden Cash Envelope', note: '$40,000 in cash to brighten your future.', type: 'cash', value: 40000 },
-    { id: 'roadster', label: 'A Shiny Little Roadster', note: 'A new convertible for open-road adventures.', type: 'car', value: 50000 },
-    { id: 'world', label: 'A Trip Around the World', note: 'A globe-spanning getaway with flights and stays included.', type: 'trip', value: 75000 },
     { id: 'jackpot', label: 'The Wisdom Cash Jackpot', note: '$100,000 in cash: the ultimate wisdom reward.', type: 'cash', value: 100000 },
+    { id: 'roadster', label: 'A Shiny Little Roadster', note: 'A new convertible for open-road adventures.', type: 'car', value: 50000 },
+    { id: 'hauler', label: 'A Rugged Adventure Truck', note: 'A new pickup built for every back road.', type: 'car', value: 65000 },
+    { id: 'camper', label: 'A Retro Camper Van', note: 'A rolling home with a tiny kitchen and a big window.', type: 'car', value: 85000 },
+    { id: 'world', label: 'A Trip Around the World', note: 'A globe-spanning getaway with flights and stays included.', type: 'trip', value: 75000 },
+    { id: 'sabbatical', label: 'A Year of Monthly Getaways', note: 'Twelve trips, one every month.', type: 'trip', value: 45000 },
     { id: 'homestead', label: 'A Cozy Cabin Homestead', note: 'Your own little cabin home, not just a holiday stay.', type: 'home', value: 60000 },
+    { id: 'renovation', label: 'A Whole-Home Makeover', note: 'New kitchen, new bath, new everything.', type: 'home', value: 90000 },
+    { id: 'workshop', label: 'A Dream Backyard Workshop', note: 'A finished studio out back, tools and all.', type: 'home', value: 30000 },
+    { id: 'studio', label: 'A Creator Studio Kit', note: 'Cameras, lights, and a computer that never stalls.', type: 'tech', value: 20000 },
+    { id: 'smarthome', label: 'A Fully Smart Home', note: 'Every screen, speaker, and switch, installed.', type: 'tech', value: 35000 },
+    { id: 'tuition', label: 'A Year of Learning Anything', note: 'Tuition or classes for whatever you have wanted to study.', type: 'experience', value: 55000 },
+    { id: 'gameday', label: 'Season Tickets and a Big Finale', note: 'A full season of seats plus the championship trip.', type: 'experience', value: 28000 },
   ].map(Object.freeze),
 );
 
@@ -221,7 +279,7 @@ function passTurn(game) {
   game.activePlayer = (game.activePlayer + 1) % game.players.length;
   game.action = 'spin';
   game.pendingValue = 0;
-  game.pendingTrip = null;
+  game.pendingPrize = null;
   startClock(game);
   game.message += ` ${game.players[game.activePlayer].name}, it is your turn.`;
 }
@@ -256,7 +314,7 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     Array.from(names).every((name) => typeof name === 'string' && name.trim().length > 0 && name.trim().length <= 24),
     'Player names must contain 1 to 24 characters.',
   );
-  const players = names.map((name) => ({ name: name.trim(), total: 0, round: 0, trips: [] }));
+  const players = names.map((name) => ({ name: name.trim(), total: 0, round: 0, prizes: [] }));
   const seen = historyForNewGame(seenPuzzleIds);
   const puzzle = pickPuzzle(seen, rng);
   return {
@@ -278,8 +336,8 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     bonusWon: null,
     usedPuzzleIds: [...seen, puzzle.id],
     lastSpin: null,
-    pendingTrip: null,
-    claimedTripIndices: [],
+    pendingPrize: null,
+    claimedPrizeIndices: [],
     roundPrizes: [],
     turnSerial: 1,
     turnSeconds: TURN_SECONDS,
@@ -306,25 +364,26 @@ export function spinWheel(game, rng = Math.random) {
     .filter(({ segment }) => !(blockBankrupt && segment.type === 'bankrupt'));
   const { segment, index } = eligible[randomIndex(eligible.length, rng)];
   game.lastSpin = { index, ...segment };
-  game.pendingTrip = null;
-  if (segment.type === 'cash' || segment.type === 'trip') {
+  game.pendingPrize = null;
+  if (segment.type === 'cash' || isPrizeWedge(segment)) {
     game.pendingValue = segment.value * (game.round === FINAL_ROUND ? 2 : 1);
     game.action = 'consonant';
     startClock(game);
-    if (segment.type === 'trip') {
-      game.pendingTrip = { ...TRIP_PRIZES[randomIndex(TRIP_PRIZES.length, rng)] };
-      game.lastSpin.prize = { ...game.pendingTrip };
-      game.message = `Trip surprise: ${game.pendingTrip.label}! Name a matching consonant to claim it, then solve the round to keep it.`;
+    if (isPrizeWedge(segment)) {
+      const catalog = WEDGE_PRIZES[segment.type];
+      game.pendingPrize = { ...catalog[randomIndex(catalog.length, rng)], kind: segment.type };
+      game.lastSpin.prize = { ...game.pendingPrize };
+      game.message = `${segment.type === 'trip' ? 'Trip surprise' : 'Mystery prize'}: ${game.pendingPrize.label}! Name a matching consonant to claim it, then solve the round to keep it.`;
     } else {
       game.message = `Choose a consonant for $${game.pendingValue.toLocaleString('en-US')} per letter.`;
     }
   } else {
     if (segment.type === 'bankrupt') {
       const player = game.players[game.activePlayer];
-      const lostTrips = player.trips.length;
+      const lostPrizes = player.prizes.length;
       player.round = 0;
-      player.trips = [];
-      game.message = `Bankrupt! Your round winnings${lostTrips > 0 ? ' and trips are' : ' are'} cleared; your banked total is safe.`;
+      player.prizes = [];
+      game.message = `Bankrupt! Your round winnings${lostPrizes > 0 ? ' and prizes are' : ' are'} cleared; your banked total is safe.`;
     } else {
       game.message = 'Lose a turn! Your winnings are safe.';
     }
@@ -355,21 +414,21 @@ export function guessLetter(game, letter) {
   const occurrences = [...game.puzzle.phrase.toUpperCase()].filter((char) => char === choice).length;
   if (vowel) player.round -= VOWEL_COST;
   else player.round += occurrences * game.pendingValue;
-  const trip = game.pendingTrip;
+  const pendingPrize = game.pendingPrize;
   game.usedLetters.push(choice);
   game.action = 'spin';
   game.pendingValue = 0;
-  game.pendingTrip = null;
+  game.pendingPrize = null;
   if (occurrences > 0) {
-    const claimed = trip && !vowel;
+    const claimed = pendingPrize && !vowel;
     if (claimed) {
-      player.trips.push({ ...trip });
-      game.claimedTripIndices.push(game.lastSpin.index);
+      player.prizes.push({ ...pendingPrize });
+      game.claimedPrizeIndices.push(game.lastSpin.index);
     }
     startClock(game);
-    game.message = `${choice} appears ${occurrences} time${occurrences === 1 ? '' : 's'}!${claimed ? ` The ${trip.label} is yours if you solve this round.` : ''} Spin, buy a vowel, or solve.`;
+    game.message = `${choice} appears ${occurrences} time${occurrences === 1 ? '' : 's'}!${claimed ? ` The ${pendingPrize.label} is yours if you solve this round.` : ''} Spin, buy a vowel, or solve.`;
   } else {
-    game.message = `No ${choice} in this puzzle.${trip ? ` The ${trip.label} slips away.` : ''}`;
+    game.message = `No ${choice} in this puzzle.${pendingPrize ? ` The ${pendingPrize.label} slips away.` : ''}`;
     passTurn(game);
   }
   return game;
@@ -385,16 +444,16 @@ export function solvePuzzle(game, answer) {
   }
   const player = game.players[game.activePlayer];
   const prize = Math.max(player.round, 1000);
-  const trips = player.trips.map((trip) => ({ ...trip }));
-  const tripValue = trips.reduce((total, trip) => total + trip.value, 0);
-  player.total += prize + tripValue;
+  const prizes = player.prizes.map((held) => ({ ...held }));
+  const prizeValue = prizes.reduce((total, held) => total + held.value, 0);
+  player.total += prize + prizeValue;
   game.roundWinner = game.activePlayer;
-  game.roundPrizes = trips;
+  game.roundPrizes = prizes;
   game.phase = 'round-end';
   game.action = 'spin';
   game.pendingValue = 0;
-  game.pendingTrip = null;
-  game.message = `${player.name} solved it and banks $${(prize + tripValue).toLocaleString('en-US')}!${trips.length > 0 ? ` Trips won: ${trips.map((trip) => trip.label).join(', ')}.` : ''}`;
+  game.pendingPrize = null;
+  game.message = `${player.name} solved it and banks $${(prize + prizeValue).toLocaleString('en-US')}!${prizes.length > 0 ? ` Prizes won: ${prizes.map((held) => held.label).join(', ')}.` : ''}`;
   return game;
 }
 
@@ -415,15 +474,15 @@ export function nextRound(game, rng = Math.random) {
   game.puzzle = puzzle;
   // The bonus puzzle is only claimed once its category is chosen.
   if (game.round !== FINAL_ROUND) game.usedPuzzleIds.push(puzzle.id);
-  game.players.forEach((player) => { player.round = 0; player.trips = []; });
+  game.players.forEach((player) => { player.round = 0; player.prizes = []; });
   game.usedLetters = [];
   game.action = 'spin';
   game.pendingValue = 0;
-  game.pendingTrip = null;
+  game.pendingPrize = null;
   game.lastSpin = null;
   game.roundWinner = null;
   game.roundPrizes = [];
-  game.claimedTripIndices = [];
+  game.claimedPrizeIndices = [];
   startClock(game);
   if (game.round < FINAL_ROUND) {
     game.round += 1;

@@ -1,6 +1,6 @@
 # Wheel of Wisdom
 
-play the game https://jamesmontemagno.github.io/wheel-of-wisdom/
+play the game https://www.wheelofwisdom.app
 
 A portrait-first, pass-and-play word game for **2–3 players sharing one phone**. An independent fan-made game with original puzzles, no accounts, no backend, and no real-money prizes.
 
@@ -39,6 +39,15 @@ A service worker caches the game shell, so play works without a connection after
 - `.github/workflows/deploy.yml` tests, builds, and publishes `dist/` to GitHub Pages on every push to `main` (and on demand via *Run workflow*).
 
 Enable it once per repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+The site is served from the custom domain **www.wheelofwisdom.app**. `public/CNAME` keeps that domain attached on every deploy, so point the DNS `CNAME` record for `www` at `jamesmontemagno.github.io` and enable *Enforce HTTPS* in **Settings → Pages**.
+
+## SEO and sharing
+
+- `index.html` carries the canonical URL, description, robots, Open Graph, Twitter card, and `VideoGame` JSON-LD structured data, all pointing at `https://www.wheelofwisdom.app/`.
+- `public/robots.txt` and `public/sitemap.xml` are served from the site root and reference the same domain.
+- `public/social-card.png` (1200×630) is the Open Graph and Twitter share image. Edit `assets/social-card.svg` and rasterize it back to that PNG at 1200×630 to change the card.
+- Absolute URLs are used in metadata, so update them all if the domain ever changes.
 
 ## How to play
 

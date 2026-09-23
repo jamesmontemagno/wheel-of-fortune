@@ -8,9 +8,13 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
+        id: './',
         name: 'Wheel of Wisdom',
         short_name: 'Wheel',
         description: 'Turn your phone into game night. Spin the wheel, solve original word puzzles, and play with two or three friends on one device.',
+        lang: 'en',
+        dir: 'ltr',
+        categories: ['games', 'entertainment', 'education'],
         start_url: './',
         scope: './',
         display: 'standalone',
@@ -25,6 +29,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globIgnores: ['**/social-card.png'],
       },
     }),
   ],

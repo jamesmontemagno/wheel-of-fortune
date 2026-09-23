@@ -213,7 +213,7 @@ for (const round of [2, 3]) {
       effective.forEach((wedge, wedgeIndex) => {
         if (wedgeIndex !== index) assert.deepEqual(wedge, base[wedgeIndex]);
       });
-      const heldTrip = structuredClone(game.players[1].prizes);
+      const heldPrize = structuredClone(game.players[1].prizes);
       // A removed trip is a cash spin and consumes no prize draw.
       spinWheel(game, sequence(draw));
       assert.equal(game.lastSpin.type, 'cash');
@@ -221,7 +221,7 @@ for (const round of [2, 3]) {
       assert.equal(game.pendingValue, segment.value * (round === FINAL_ROUND ? 2 : 1));
       assert.equal(game.pendingPrize, null);
       guessLetter(game, 'D');
-      assert.deepEqual(game.players[1].prizes, heldTrip);
+      assert.deepEqual(game.players[1].prizes, heldPrize);
       assert.deepEqual(game.claimedPrizeIndices, [index]);
       spin(game, 'bankrupt');
       assert.deepEqual(game.players[1].prizes, []);

@@ -303,7 +303,7 @@ function playerMarkup() {
     <div class="player-score color-${i} ${game.activePlayer === i ? 'active-player' : ''}">
       <div class="score-name"><span class="score-dot" aria-hidden="true"></span><span>${escape(player.name)}</span>${game.activePlayer === i ? '<span class="turn-tag">UP</span>' : ''}</div>
       <strong>${money(player.round)}</strong><span class="banked-label">BANKED <b>${money(player.total)}</b></span>
-      ${player.prizes.length > 0 ? `<span class="trip-tag">${icon(prizeIcon(player.prizes[0]))} ${player.prizes.length} PRIZE${player.prizes.length === 1 ? '' : 'S'} HELD</span>` : ''}
+      ${player.prizes.length > 0 ? `<span class="prize-tag">${icon(prizeIcon(player.prizes[0]))} ${player.prizes.length} PRIZE${player.prizes.length === 1 ? '' : 'S'} HELD</span>` : ''}
     </div>`).join('')}</div>`
 }
 
@@ -353,7 +353,7 @@ const confettiMarkup = () => `<div class="confetti" aria-hidden="true">${Array.f
 
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="trip-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="prize-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {

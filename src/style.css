@@ -128,8 +128,8 @@ h1, h2, h3, .brand { font-family: 'Outfit', sans-serif; }
 .player-score > strong { display: inline-block; font-family: 'Outfit', sans-serif; font-size: 26px; font-weight: 550; margin-top: 6px; }
 .banked-label { font-size: 8px; letter-spacing: .7px; color: #7e8574; float: right; margin-top: 22px; }
 .banked-label b { font-size: 10px; letter-spacing: 0; color: #637459; font-weight: 600; margin-left: 4px; }
-.trip-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 9px; font-size: 7px; letter-spacing: .5px; font-weight: 700; color: #1f5674; background: #dcecf5; border-radius: 4px; padding: 3px 5px; }
-.trip-tag svg { width: 10px; height: 10px; }
+.prize-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 9px; font-size: 7px; letter-spacing: .5px; font-weight: 700; color: #1f5674; background: #dcecf5; border-radius: 4px; padding: 3px 5px; }
+.prize-tag svg { width: 10px; height: 10px; }
 .turn-banner { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 13px 18px; border-radius: 12px; border: 1px solid var(--player-color); background: linear-gradient(90deg, var(--player-bg), #fffef8 70%); position: relative; overflow: hidden; }
 .turn-banner-pulse { width: 11px; height: 11px; border-radius: 50%; background: var(--player-color); flex-shrink: 0; animation: turn-pulse 1.9s ease-out infinite; }
 .turn-banner-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -142,12 +142,12 @@ h1, h2, h3, .brand { font-family: 'Outfit', sans-serif; }
 .turn-clock.urgent small { color: #bd412e; }
 @keyframes turn-pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes turn-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.trip-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; }
-.trip-list > div { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 10px; background: #e9f2f7; border: 1px solid #c8dfeb; font-size: 11px; }
-.trip-list svg { width: 18px; height: 18px; color: #2c6a8c; flex-shrink: 0; }
-.trip-list span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.trip-list small { font-size: 9px; color: #6c7c86; }
-.trip-list b { margin-left: auto; white-space: nowrap; font-family: 'Outfit', sans-serif; font-size: 15px; }
+.prize-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; }
+.prize-list > div { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 10px; background: #e9f2f7; border: 1px solid #c8dfeb; font-size: 11px; }
+.prize-list svg { width: 18px; height: 18px; color: #2c6a8c; flex-shrink: 0; }
+.prize-list span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.prize-list small { font-size: 9px; color: #6c7c86; }
+.prize-list b { margin-left: auto; white-space: nowrap; font-family: 'Outfit', sans-serif; font-size: 15px; }
 .mystery-prize { display: flex; flex-direction: column; align-items: center; gap: 9px; font-size: 20px; }
 .mystery-prize svg { width: 46px; height: 46px; color: #a37d27; }
 .mystery-prize.unlocked svg { color: #2f7a4e; }

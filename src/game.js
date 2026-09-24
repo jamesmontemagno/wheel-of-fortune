@@ -485,7 +485,7 @@ export function solvePuzzle(game, answer) {
   game.action = 'spin';
   game.pendingValue = 0;
   game.pendingPrize = null;
-  game.message = `${player.name} solved it and wins $${roundWinnings.toLocaleString('en-US')} this round, for a new total of $${player.total.toLocaleString('en-US')}!${prizes.length > 0 ? ` Prizes won: ${prizes.map((held) => held.label).join(', ')}.` : ''}`;
+  game.message = `${player.name} solved it and wins $${roundWinnings.toLocaleString('en-US')}${prizes.length > 0 ? ' in cash and prizes' : ''} this round, for a new total of $${player.total.toLocaleString('en-US')}!${prizes.length > 0 ? ` Prizes won: ${prizes.map((held) => held.label).join(', ')}.` : ''}`;
   return game;
 }
 

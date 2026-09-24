@@ -347,6 +347,7 @@ function keyboardMarkup() {
 }
 
 function playingControls() {
+  const bankruptsLeft = bankruptsRemaining(game)
   const canBuy = game.action === 'spin' && game.players[game.activePlayer].round >= 250 && [...VOWELS].some((l) => !game.usedLetters.includes(l))
   return `<section class="wheel-panel ${spinning ? 'spinning' : ''}" aria-label="Spin and actions">
     <div class="wheel-panel-heading"><span class="card-eyebrow">A LITTLE LUCK GOES A LONG WAY</span><span aria-hidden="true">✧</span></div>
@@ -354,7 +355,7 @@ function playingControls() {
     <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingPrize ? `<strong>${escape(game.pendingPrize.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
-    <p class="wheel-note">${roundMultiplier(game.round) > 1 ? `<strong class="double-stakes-note">RAISED STAKES · ALL CASH WEDGES PAY ${multiplierLabel(game.round).toUpperCase()}</strong>` : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip' || segment.type === 'mystery') ? ' · trip &amp; mystery surprises in play' : ''}<br>${bankruptsRemaining(game) === 0 ? 'Bankrupt is spent for this round' : `Bankrupt can land ${bankruptsRemaining(game)} more time${bankruptsRemaining(game) === 1 ? '' : 's'} this round`} (max ${bankruptLimit(game.round)})</p>
+    <p class="wheel-note">${roundMultiplier(game.round) > 1 ? `<strong class="double-stakes-note">RAISED STAKES · ALL CASH WEDGES PAY ${multiplierLabel(game.round).toUpperCase()}</strong>` : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip' || segment.type === 'mystery') ? ' · trip &amp; mystery surprises in play' : ''}<br>${bankruptsLeft === 0 ? 'Bankrupt is spent for this round' : `Bankrupt can land ${bankruptsLeft} more time${bankruptsLeft === 1 ? '' : 's'} this round`} (max ${bankruptLimit(game.round)})</p>
   </section>`
 }
 
@@ -363,7 +364,7 @@ const confettiMarkup = () => `<div class="confetti" aria-hidden="true">${Array.f
 
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(game.roundWinnings)}<span>WON THIS ROUND</span></div><div class="round-total">${money(player.total)}<span>NEW TOTAL</span></div>${game.roundPrizes.length > 0 ? `<div class="prize-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(game.roundWinnings)}<span>${game.roundPrizes.length > 0 ? 'CASH &amp; PRIZES THIS ROUND' : 'WON THIS ROUND'}</span></div><div class="round-total">${money(player.total)}<span>NEW TOTAL</span></div>${game.roundPrizes.length > 0 ? `<div class="prize-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {

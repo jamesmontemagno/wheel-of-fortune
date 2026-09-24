@@ -49,7 +49,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '800', type: 'cash', value: 800 },
     { label: '1,000', type: 'cash', value: 1000 },
     { label: '700', type: 'cash', value: 700 },
-    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,100', type: 'cash', value: 1100 },
     { label: '850', type: 'cash', value: 850 },
     { label: '1,200', type: 'cash', value: 1200 },
   ]),
@@ -62,7 +62,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '800', type: 'cash', value: 800 },
     { label: '3,500', type: 'cash', value: 3500 },
     { label: 'LOSE TURN', type: 'lose-turn', value: 0 },
-    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,000', type: 'cash', value: 1000 },
     { label: '1,500', type: 'cash', value: 1500 },
     { label: 'MYSTERY', type: 'mystery', value: 850 },
     { label: '750', type: 'cash', value: 750 },
@@ -80,7 +80,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '900', type: 'cash', value: 900 },
     { label: '5,000', type: 'cash', value: 5000 },
     { label: 'LOSE TURN', type: 'lose-turn', value: 0 },
-    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,100', type: 'cash', value: 1100 },
     { label: '1,600', type: 'cash', value: 1600 },
     { label: 'MYSTERY', type: 'mystery', value: 950 },
     { label: '850', type: 'cash', value: 850 },
@@ -88,7 +88,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '1,400', type: 'cash', value: 1400 },
     { label: '1,000', type: 'cash', value: 1000 },
     { label: '2,500', type: 'cash', value: 2500 },
-    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,300', type: 'cash', value: 1300 },
     { label: '950', type: 'cash', value: 950 },
   ]),
 ]);
@@ -106,6 +106,20 @@ export function roundMultiplier(round) {
 
 // How a multiplied round is announced on screen, e.g. "1.5x" or "2x".
 export const multiplierLabel = (round) => `${roundMultiplier(round)}x`;
+
+// Bankrupt wedges stay on the board all round, but they can only be landed on this many times.
+export const BANKRUPT_LIMITS = Object.freeze([1, 2, 3, 4]);
+
+export function bankruptLimit(round) {
+  const index = Math.min(Math.max(Math.trunc(Number(round) || 1), 1), BANKRUPT_LIMITS.length) - 1;
+  return BANKRUPT_LIMITS[index];
+}
+
+// How many Bankrupt landings the round still allows.
+export function bankruptsRemaining(game) {
+  const used = Number.isFinite(game?.bankruptsHit) ? game.bankruptsHit : 0;
+  return Math.max(0, bankruptLimit(game?.round) - used);
+}
 
 // Kept for the lobby preview and as the opening-round wheel.
 export const WHEEL_SEGMENTS = ROUND_WHEELS[0];
@@ -351,6 +365,7 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     claimedPrizeIndices: [],
     roundPrizes: [],
     roundWinnings: 0,
+    bankruptsHit: 0,
     turnSerial: 1,
     turnSeconds: TURN_SECONDS,
     bonusSeconds: BONUS_SECONDS,
@@ -369,8 +384,9 @@ export function spinWheel(game, rng = Math.random) {
   requireMainAction(game);
   requireCondition(game.action === 'spin', 'Choose a consonant before spinning again.');
   const wheel = wheelForGame(game);
-  // Two Bankrupts in a row is no fun, so that wedge is skipped right after one lands.
-  const blockBankrupt = game.lastSpin?.type === 'bankrupt';
+  // Two Bankrupts in a row is no fun, and each round only allows so many Bankrupt landings.
+  // The wedges stay on the board either way; the spin simply cannot stop on them.
+  const blockBankrupt = game.lastSpin?.type === 'bankrupt' || bankruptsRemaining(game) === 0;
   const eligible = wheel
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => !(blockBankrupt && segment.type === 'bankrupt'));
@@ -395,7 +411,9 @@ export function spinWheel(game, rng = Math.random) {
       const lostPrizes = player.prizes.length;
       player.round = 0;
       player.prizes = [];
-      game.message = `Bankrupt! Your round winnings${lostPrizes > 0 ? ' and prizes are' : ' are'} cleared; your banked total is safe.`;
+      game.bankruptsHit += 1;
+      const left = bankruptsRemaining(game);
+      game.message = `Bankrupt! Your round winnings${lostPrizes > 0 ? ' and prizes are' : ' are'} cleared; your banked total is safe. ${left === 0 ? 'Bankrupt is done for this round.' : `Bankrupt can land ${left} more time${left === 1 ? '' : 's'} this round.`}`;
     } else {
       game.message = 'Lose a turn! Your winnings are safe.';
     }
@@ -497,6 +515,7 @@ export function nextRound(game, rng = Math.random) {
   game.roundWinner = null;
   game.roundPrizes = [];
   game.roundWinnings = 0;
+  game.bankruptsHit = 0;
   game.claimedPrizeIndices = [];
   startClock(game);
   if (game.round < FINAL_ROUND) {

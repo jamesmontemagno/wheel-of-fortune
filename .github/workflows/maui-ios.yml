@@ -144,14 +144,39 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
         id: signing-identity
         run: |
-          signing_identity=$(security find-identity -v -p codesigning |
-            sed -n 's/.*"\(Apple Distribution:.*\)"/\1/p' |
-            head -n 1)
+          keychain="$HOME/Library/Keychains/signing_temp.keychain-db"
+          if [ ! -f "$keychain" ]; then
+            keychain="$HOME/Library/Keychains/signing_temp.keychain"
+          fi
+          if [ ! -f "$keychain" ]; then
+            # Fall back to the keychains currently on the search list.
+            keychain=""
+          fi
+
+          # "-v" only lists identities that pass validation, which hides the imported
+          # certificate when its intermediate is unavailable, so fall back to every identity.
+          for verify_flag in "-v" ""; do
+            identities=$(security find-identity $verify_flag -p codesigning ${keychain:+"$keychain"} || true)
+
+            echo "Available code signing identities (find-identity $verify_flag):"
+            printf '%s\n' "$identities"
+
+            signing_identity=$(printf '%s\n' "$identities" |
+              grep -Eo '"(Apple|iPhone) Distribution: [^"]+"' |
+              head -n 1 |
+              tr -d '"')
+
+            if [ -n "$signing_identity" ]; then
+              break
+            fi
+          done
 
           if [ -z "$signing_identity" ]; then
-            echo "The imported Apple Distribution signing identity was not found" >&2
+            echo "No Apple Distribution or iPhone Distribution signing identity was found in the keychain" >&2
             exit 1
           fi
+
+          echo "Using signing identity: $signing_identity"
 
           echo "name=$signing_identity" >> "$GITHUB_OUTPUT"
 

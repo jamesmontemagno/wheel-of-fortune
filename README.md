@@ -1,6 +1,6 @@
 # Wheel of Wisdom
 
-play the game https://jamesmontemagno.github.io/wheel-of-wisdom/
+play the game https://www.wheelofwisdom.app
 
 A portrait-first, pass-and-play word game for **2–3 players sharing one phone**. An independent fan-made game with original puzzles, no accounts, no backend, and no real-money prizes.
 
@@ -61,26 +61,37 @@ Signed Android releases require the `ANDROID_KEYSTORE`, `ANDROID_KEYSTORE_PASSWO
 
 Enable it once per repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
+The site is served from the custom domain **www.wheelofwisdom.app**. `public/CNAME` keeps that domain attached on every deploy, so point the DNS `CNAME` record for `www` at `jamesmontemagno.github.io` and enable *Enforce HTTPS* in **Settings → Pages**.
+
+## SEO and sharing
+
+- `index.html` carries the canonical URL, description, robots, Open Graph, Twitter card, and `VideoGame` JSON-LD structured data, all pointing at `https://www.wheelofwisdom.app/`.
+- `public/robots.txt` and `public/sitemap.xml` are served from the site root and reference the same domain.
+- `public/social-card.png` (1200×630) is the Open Graph and Twitter share image. Edit `assets/social-card.svg` and rasterize it back to that PNG at 1200×630 to change the card.
+- Absolute URLs are used in metadata, so update them all if the domain ever changes.
+
 ## How to play
 
 - Enter player names, choose two or three players, and pass the device on each turn. Names and party size are remembered on this browser.
 - A bold banner plus a **30-second turn clock** shows whose turn it is. Run out of time and play passes on; winnings are untouched. The clock pauses while the wheel spins or a dialog is open, and restarts after every successful action.
 - Spin the animated wheel, then choose a consonant. Each match earns the wheel value. Wrong guesses pass the turn.
 - Each round uses a bigger wheel with richer cash: 12 spaces in round one, 14 in round two, 16 in round three, and 18 in round four.
-- **Trip** wedges appear from round two. Land on one to reveal a surprise trip, claim it with a matching consonant, then solve that round to bank its value. Once claimed, that wedge becomes cash for the rest of the round ($600 in round two, $800 in round three, and $900 before the double-stakes multiplier in round four). Bankrupt or losing the round loses held trips, but does not restore the wedge. Missed guesses leave the trip wedge available.
+- **Trip** and **Mystery** wedges appear from round two, one of each on the wheel. Trip reveals a surprise getaway drawn from 20 destinations worth $5,200 to $15,000. Mystery reveals a fun household or hobby prize drawn from 24 surprises worth $600 to $5,000. Claim either with a matching consonant, then solve that round to bank its value. Once claimed, that wedge becomes cash for the rest of the round (Trip pays $600, $800, and $900 in rounds two through four; Mystery pays $650, $850, and $950, before the round multiplier in rounds three and four). Bankrupt or losing the round loses held prizes, but does not restore the wedge. Missed guesses leave the wedge available.
 - Buy a vowel for $250 from your current round winnings before spinning. Vowels do not earn money; a missing vowel still costs $250 and passes the turn.
-- **Bankrupt** appears once on the round-one wheel and never lands twice in a row. It clears only current round winnings and held trips. **Lose a Turn** preserves them. Both pass play to the next person.
-- Solve the whole puzzle to bank your round winnings, with a $1,000 minimum, plus any trips you claimed. Only the solver banks money. Case, spacing, and punctuation do not matter; wrong solutions pass the turn.
-- Play four rounds, with round four flagged as **DOUBLE STAKES** by a banner above the scoreboard; every cash wedge pays double. The lowest banked score starts each new round; ties are broken in rotating player order, starting with the usual round starter. Player one starts the first round.
+- **Bankrupt** keeps one wedge on the wheel in rounds one and two and two wedges in rounds three and four. The wedges stay on the board all round, but a round only allows a limited number of Bankrupt landings: one in round one, two in round two, three in round three, and four in round four. Once that limit is reached the spin skips those wedges, and Bankrupt never lands twice in a row. It clears only current round winnings and held prizes. **Lose a Turn** preserves them. Both pass play to the next person.
+- Solve the whole puzzle to bank your round winnings, with a $1,000 minimum, plus any trip and mystery prizes you claimed. The round-end summary shows how much was won that round and the winner's new total. Only the solver banks money. Case, spacing, and punctuation do not matter; wrong solutions pass the turn.
+- Play four rounds, with raised stakes flagged by a banner above the scoreboard: round three pays **1.5x** on every cash wedge and round four pays **2x**. The lowest banked score starts each new round; ties are broken in rotating player order, starting with the usual round starter. Player one starts the first round.
 - The player with the most banked money gets the bonus round. Ties are settled with a random draw.
-- The bonus puzzle board stays covered while the champion spins for an envelope.
-- The champion spins a **mystery wheel** of six sealed envelopes worth $25,000 to $100,000, including cash, a new roadster, a trip around the world, and a cozy cabin. The prize stays hidden until the bonus round ends.
-- The bonus puzzle starts with R, S, T, L, N, E revealed. Pick three more consonants and one vowel within 60 seconds; if that clock runs out, the solve starts with whatever letters were picked. The board and keyboard show how many consonants and vowels are still left to pick. Then solve within 30 seconds with one attempt. The clock continues if you switch apps or open help.
+- The bonus puzzle board stays covered while the champion spins for an envelope and chooses a category. The selected bonus puzzle has no more than 30% of its letter tiles in the given letters R, S, T, L, N, E; repeated letters count separately, while spaces and punctuation do not.
+- The champion spins a **mystery wheel** of six sealed envelopes. One of 16 bonus prizes worth $10,000 to $100,000 is inside: cash envelopes, cars from a roadster to a retro camper van, dream trips, home upgrades, tech setups, and once-in-a-lifetime experiences. The prize stays hidden during the bonus round and opens automatically on a win. If the champion runs out of time, the result says the bonus was not won and they can click the envelope to see its prize.
+- After the spin, the champion chooses the bonus puzzle from **three different categories**. R, S, T, L, N, E are then revealed on the board right away.
+- Pick three more consonants and one vowel within 45 seconds; if that clock runs out, the round continues with whatever letters were picked. The chosen letters fill in on the board together, a 5-second countdown gets the champion ready, and then the solve begins.
+- Solve within 45 seconds with unlimited guesses. A win opens the envelope automatically; otherwise the envelope can be clicked to reveal the prize that was missed. The clock continues if you switch apps or open help.
 - Solving a round sets off a short confetti-and-fanfare celebration for the winning player, and on phones the wheel spins in a full-screen pop-up so everyone can follow it.
-- The envelope opens with an animation whether you win, guess incorrectly, or run out of time. Only a correct answer adds the prize value to your score.
-- The **History** tab shows completed games and a leaderboard of cumulative final scores, including banked trips and won bonus prizes. Names are matched without regard to surrounding spaces or capitalization; identical names share a leaderboard entry.
+- The envelope opens with an animation after a correct answer, or when the champion clicks it after running out of time. Only a correct answer adds the prize value to the score.
+- The **History** tab shows completed games and a leaderboard of cumulative final scores, including banked trip and mystery prizes plus won bonus prizes. Names are matched without regard to surrounding spaces or capitalization; identical names share a leaderboard entry.
 
-Categories, puzzles, trip surprises, and the mystery envelope are selected randomly, with no repeated puzzles within a game. Puzzles played in earlier games on this device are also skipped; once the bank can no longer fill a full game, the played list resets and every puzzle becomes available again. Every wheel segment is equally likely. Sound is optional, reduced-motion preferences are respected, and a physical keyboard can be used to select letters.
+Categories, puzzles, trip and mystery surprises, and the bonus envelope are selected randomly, with no repeated puzzles within a game. Puzzles played in earlier games on this device are also skipped; the played list resets as needed to leave enough eligible puzzles for a full game and its bonus round. Every wheel segment is equally likely. Sound is optional, reduced-motion preferences are respected, and a physical keyboard can be used to select letters.
 
 Unfinished games live in memory: reloading or returning home discards the current game without saving its scores. Player names, played puzzles, and completed game history are stored locally in this browser, with no account or server; clearing browser data removes them. If local storage is unavailable or full, the app stays playable and warns that new data lasts only for the current visit. Players use a **single shared device**, not separate online sessions. Gameplay needs no network after loading; the optional web fonts fall back to system fonts if unavailable.
 

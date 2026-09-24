@@ -261,8 +261,12 @@ function pickBonusCategoryOptions(usedIds, rng) {
   const available = PUZZLES.filter((puzzle) => !usedIds.includes(puzzle.id) && isBonusPuzzleEligible(puzzle));
   requireCondition(available.length > 0, 'No unused puzzles remain.');
   const categories = [...new Set(available.map((puzzle) => puzzle.category))];
+  requireCondition(
+    categories.length >= BONUS_CATEGORY_CHOICES,
+    `At least ${BONUS_CATEGORY_CHOICES} bonus puzzle categories are required.`,
+  );
   const options = [];
-  while (options.length < BONUS_CATEGORY_CHOICES && categories.length > 0) {
+  while (options.length < BONUS_CATEGORY_CHOICES) {
     const [category] = categories.splice(randomIndex(categories.length, rng), 1);
     const candidates = available.filter((puzzle) => puzzle.category === category);
     options.push({ ...candidates[randomIndex(candidates.length, rng)] });
@@ -327,6 +331,7 @@ function historyForNewGame(seenPuzzleIds) {
   const remainingBonusPuzzles = PUZZLES.filter(
     (puzzle) => isBonusPuzzleEligible(puzzle) && !seenIds.has(puzzle.id),
   ).length;
+  // A full game consumes one puzzle per main round and reserves one for the bonus round.
   return remainingBonusPuzzles >= PUZZLES_PER_GAME ? seen : [];
 }
 

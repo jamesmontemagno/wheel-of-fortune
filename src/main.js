@@ -1,4 +1,3 @@
-import './style.css'
 import {
   WHEEL_SEGMENTS, BONUS_WHEEL, BONUS_GIVEN_LETTERS, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
   BONUS_PICK_SECONDS, BONUS_COUNTDOWN_SECONDS, FINAL_ROUND, bonusLettersRemaining,
@@ -11,10 +10,28 @@ import { createStorage, recordGame, leaderboard } from './storage.js'
 import { setupPWA } from './pwa.js'
 
 const app = document.querySelector('#app')
+const preferenceKeys = {
+  sound: 'wheel-of-wisdom.sound',
+  players: 'wheel-of-wisdom.players',
+}
+await window.__wheelOfWisdomBridge.initialize()
+const isNativeHost = window.__wheelOfWisdomBridge.isNative
 const money = (value) => `$${value.toLocaleString('en-US')}`
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char])
+const restorePreference = (key, fallback) => {
+  const value = window.__wheelOfWisdomBridge?.state?.[key]
+  if (value === undefined || value === null) return fallback
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return value
+    }
+  }
+  return value
+}
 const icons = {
   arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
   spin: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-2L20 8M4 16l2.4 3A7 7 0 0 0 18 17"/>',
@@ -39,10 +56,23 @@ const SEALED_PHASES = ['bonus-spin', 'bonus-category']
 
 let game = null
 const storage = createStorage()
-const savedPlayers = storage.loadPlayers()
+const browserSavedPlayers = storage.loadPlayers()
+const restoredPlayers = restorePreference(preferenceKeys.players, browserSavedPlayers)
+const savedPlayers = [2, 3].includes(restoredPlayers?.count) &&
+  Array.isArray(restoredPlayers.names) &&
+  restoredPlayers.names.length === 3 &&
+  restoredPlayers.names.every((name) => typeof name === 'string' && name.length <= 24)
+  ? restoredPlayers
+  : browserSavedPlayers
 let playerCount = savedPlayers.count
 let names = savedPlayers.names
-let history = storage.loadHistory()
+const browserHistory = storage.loadHistory()
+const nativeHistory = Array.isArray(window.__wheelOfWisdomBridge.state.history)
+  ? window.__wheelOfWisdomBridge.state.history
+  : []
+let history = [...new Map([...(isNativeHost ? nativeHistory : []), ...browserHistory]
+  .map((entry) => [entry.id, entry])).values()]
+  .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
 let seenPuzzleIds = usablePuzzleHistory(storage.loadSeenPuzzles())
 let gameId
 let gameRecorded = false
@@ -51,7 +81,7 @@ let storageFailed = false
 let spinning = false
 let wheelAngle = 0
 let vowelMode = false
-let sound = false
+let sound = restorePreference(preferenceKeys.sound, false)
 let audio
 let bonusDeadline = 0
 let bonusTimer
@@ -64,6 +94,12 @@ let turnKey = ''
 let turnRemaining = TURN_SECONDS * 1000
 let turnLastTick = 0
 let dialogReturnFocus
+
+if (isNativeHost && browserHistory.length) {
+  Promise.all(browserHistory.map((entry) => window.__wheelOfWisdomBridge.saveHistory(entry)))
+    .then(() => checkSaved(storage.clearHistory()))
+    .catch(() => checkSaved(false))
+}
 
 function activeWheel() {
   if (!game) return WHEEL_SEGMENTS
@@ -141,6 +177,7 @@ function shell(content) {
     button.innerHTML = icon(sound ? 'sound' : 'mute')
     button.setAttribute('aria-label', `Turn sound ${sound ? 'off' : 'on'}`)
     button.setAttribute('aria-pressed', String(sound))
+    window.__wheelOfWisdomBridge?.save?.(preferenceKeys.sound, sound)
     tone(520)
   }
   document.querySelector('.brand').onclick = (event) => {
@@ -237,15 +274,22 @@ function checkSaved(success) {
   storageFailed = true
   const notice = document.querySelector('#storage-notice')
   if (notice) notice.textContent = 'Local saving is unavailable. New names and results will only last for this visit.'
+  const footnote = document.querySelector('.setup-footnote')
+  if (footnote && game?.phase === 'game-over') footnote.textContent = 'Results kept for this visit only.'
 }
 
 function savePlayers() {
   checkSaved(storage.savePlayers(playerCount, names))
+  if (window.__wheelOfWisdomBridge?.save) {
+    window.__wheelOfWisdomBridge.save(preferenceKeys.players, JSON.stringify({ count: playerCount, names }))
+  }
 }
 
 function renderHistory() {
-  history = [...new Map([...history, ...storage.loadHistory()].map((entry) => [entry.id, entry])).values()]
-    .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
+  if (!isNativeHost) {
+    history = [...new Map([...history, ...storage.loadHistory()].map((entry) => [entry.id, entry])).values()]
+      .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
+  }
   const scores = leaderboard(history)
   shell(`<section class="history-page" aria-labelledby="history-title">
     <span class="card-eyebrow">THE GAME-NIGHT HALL OF FAME</span>
@@ -265,7 +309,7 @@ function renderHistory() {
         </li>`).join('')}</ol>
       </section>
     </div>` : `<div class="history-card history-empty">${icon('trophy')}<h2>Your first chapter awaits.</h2><p>Finish a game to save the scores and start your leaderboard.</p></div>`}
-    <p class="history-note">Pretend prizes, real bragging rights. Clearing browser data removes saved names and history.</p>
+    <p class="history-note">Pretend prizes, real bragging rights. ${isNativeHost ? 'Game history is stored in this app’s local database.' : 'Clearing browser data removes saved names and history.'}</p>
   </section>`)
 }
 
@@ -414,7 +458,11 @@ function renderGame() {
   if (game.phase === 'game-over' && !gameRecorded) {
     history = recordGame(history, game, gameId)
     gameRecorded = true
-    checkSaved(storage.saveHistory(history))
+    if (isNativeHost) {
+      window.__wheelOfWisdomBridge.saveHistory(history[0]).catch(() => checkSaved(false))
+    } else {
+      checkSaved(storage.saveHistory(history))
+    }
   }
   const bonus = BONUS_PHASES.includes(game.phase)
   shell(`<section class="game-shell">

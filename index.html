@@ -56,10 +56,96 @@
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
       }
     </script>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app"></div>
     <noscript>This game needs JavaScript enabled to spin the wheel and play.</noscript>
+    <script>
+      const hybridWebViewReady = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = '_framework/hybridwebview.js';
+        script.onload = resolve;
+        script.onerror = resolve;
+        document.head.append(script);
+      });
+      let resolveMauiPreferences;
+      const mauiPreferencesReady = new Promise((resolve) => {
+        resolveMauiPreferences = resolve;
+      });
+      const pendingHistorySaves = new Map();
+
+      window.__wheelOfWisdomBridge = {
+        isNative: false,
+        state: {},
+        async initialize() {
+          await hybridWebViewReady;
+          if (!window.HybridWebView) {
+            resolveMauiPreferences();
+            return;
+          }
+
+          this.isNative = true;
+          window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'requestRestore' }));
+          await Promise.race([
+            mauiPreferencesReady,
+            new Promise((resolve) => setTimeout(() => {
+              console.warn('MAUI preferences were not restored before startup.');
+              resolve();
+            }, 2000)),
+          ]);
+        },
+        save(key, value) {
+          if (window.HybridWebView) {
+            window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'save', values: { [key]: value } }));
+          }
+          this.state[key] = value;
+        },
+        saveHistory(entry) {
+          if (!window.HybridWebView) return Promise.resolve();
+          const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              pendingHistorySaves.delete(requestId);
+              reject(new Error('Timed out while saving game history.'));
+            }, 5000);
+            pendingHistorySaves.set(requestId, { resolve, reject, timeout });
+            window.HybridWebView.SendRawMessage(JSON.stringify({ type: 'saveHistory', requestId, entry }));
+          });
+        },
+        applyMessage(payload) {
+          if (!payload || typeof payload !== 'object') return;
+          if (payload.type === 'restore' && payload.values) {
+            Object.entries(payload.values).forEach(([key, value]) => {
+              this.state[key] = value;
+            });
+            this.state.history = Array.isArray(payload.history) ? payload.history : [];
+            resolveMauiPreferences();
+            return;
+          }
+          if (payload.type === 'historySaved' && typeof payload.requestId === 'string') {
+            const pending = pendingHistorySaves.get(payload.requestId);
+            if (!pending) return;
+            clearTimeout(pending.timeout);
+            pendingHistorySaves.delete(payload.requestId);
+            if (payload.success) pending.resolve();
+            else pending.reject(new Error('The native app could not save game history.'));
+          }
+        },
+      };
+
+      window.addEventListener('HybridWebViewMessageReceived', (event) => {
+        const message = event.detail?.message;
+        if (!message) return;
+
+        try {
+          const payload = JSON.parse(message);
+          window.__wheelOfWisdomBridge.applyMessage(payload);
+        } catch (error) {
+          console.error('Unable to read a message from the MAUI host.', error);
+        }
+      });
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

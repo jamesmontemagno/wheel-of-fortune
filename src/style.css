@@ -26,7 +26,7 @@ button { border: 0; }
 svg { width: 21px; height: 21px; flex-shrink: 0; }
 h1, h2, h3, p { margin: 0; }
 h1, h2, h3, .brand { font-family: 'Outfit', sans-serif; }
-#app { max-width: 1240px; margin: auto; padding: 0 52px; }
+#app { max-width: 1240px; min-height: 100dvh; margin: auto; padding: env(safe-area-inset-top) max(52px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(52px, env(safe-area-inset-left)); }
 .site-header { height: 119px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); text-decoration: none; font-size: 19px; font-weight: 750; line-height: .99; letter-spacing: -.6px; }
 .brand-mark { color: var(--orange); font-size: 53px; font-weight: 400; line-height: 1; }
@@ -256,7 +256,7 @@ dialog .fair-play-note { padding-top: 14px; border-top: 1px solid #e3e5d5; font-
 }
 
 @media (max-width: 1000px) {
-  #app { padding: 0 30px; }
+  #app { padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); }
   .lobby { gap: 35px; }
   .setup-card { padding: 27px; }
   .game-facts { gap: 13px; font-size: 9px; }
@@ -271,7 +271,7 @@ dialog .fair-play-note { padding-top: 14px; border-top: 1px solid #e3e5d5; font-
 }
 
 @media (max-width: 720px) {
-  #app { padding: 0 20px; }
+  #app { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
   .site-header { height: 88px; }
   .header-note { display: none; }
   .lobby { gap: 30px; grid-template-columns: 1fr; padding: 34px 0; }
@@ -353,7 +353,7 @@ dialog .fair-play-note { padding-top: 14px; border-top: 1px solid #e3e5d5; font-
 }
 
 @media (max-width: 370px) {
-  #app { padding: 0 14px; }
+  #app { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
   .brand { font-size: 16px; gap: 7px; }
   .brand-mark { font-size: 42px; }
   .header-actions { gap: 7px; }

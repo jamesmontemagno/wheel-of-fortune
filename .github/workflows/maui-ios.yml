@@ -146,14 +146,18 @@ jobs:
         run: |
           keychain="$HOME/Library/Keychains/signing_temp.keychain-db"
           if [ ! -f "$keychain" ]; then
-            keychain="signing_temp.keychain"
+            keychain="$HOME/Library/Keychains/signing_temp.keychain"
+          fi
+          if [ ! -f "$keychain" ]; then
+            # Fall back to the keychains currently on the search list.
+            keychain=""
           fi
 
           # "-v" only lists identities that pass validation, which hides the imported
           # certificate when its intermediate is unavailable, so fall back to every identity.
-          identities=$(security find-identity -v -p codesigning "$keychain" || true)
+          identities=$(security find-identity -v -p codesigning ${keychain:+"$keychain"} || true)
           if ! printf '%s\n' "$identities" | grep -q '"'; then
-            identities=$(security find-identity -p codesigning "$keychain" || true)
+            identities=$(security find-identity -p codesigning ${keychain:+"$keychain"} || true)
           fi
 
           echo "Available code signing identities:"

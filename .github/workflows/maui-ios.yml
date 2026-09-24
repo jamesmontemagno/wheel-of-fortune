@@ -165,7 +165,7 @@ jobs:
             tr -d '"')
 
           if [ -z "$signing_identity" ]; then
-            echo "The imported Apple Distribution signing identity was not found" >&2
+            echo "No Apple Distribution or iPhone Distribution signing identity was found in the keychain" >&2
             exit 1
           fi
 

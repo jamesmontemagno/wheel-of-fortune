@@ -6,6 +6,7 @@ import {
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick, revealBonusPrize,
   isLetterRevealed, isBonusPuzzleEligible, normalizeAnswer, usablePuzzleHistory, PUZZLES_PER_GAME, BONUS_PICK_SECONDS,
   BONUS_SECONDS, FINAL_ROUND, bonusLettersRemaining, chooseBonusCategory, startBonusSolve,
+  ROUND_MULTIPLIERS, roundMultiplier, multiplierLabel,
   BONUS_CATEGORY_CHOICES, BONUS_COUNTDOWN_SECONDS, bonusCategoryChoices,
 } from '../src/game.js';
 import { PUZZLES } from '../src/puzzles.js';
@@ -100,7 +101,7 @@ test('round wheels grow each round, keep hazards, and add trip and mystery surpr
     assert.equal(wheel, ROUND_WHEELS[round - 1]);
     if (round > 1) assert.ok(wheel.length > wheelForRound(round - 1).length);
     assert.equal(wheel.filter((s) => s.type === 'lose-turn').length, 1);
-    assert.ok([1, 2].includes(wheel.filter((s) => s.type === 'bankrupt').length));
+    assert.equal(wheel.filter((s) => s.type === 'bankrupt').length, round);
     assert.equal(wheel.filter((s) => s.type === 'trip').length, round === 1 ? 0 : 1);
     assert.equal(wheel.filter((s) => s.type === 'mystery').length, round === 1 ? 0 : 1);
     const cash = wheel.filter((s) => s.type === 'cash').map((s) => s.value);
@@ -115,6 +116,37 @@ test('round wheels grow each round, keep hazards, and add trip and mystery surpr
   assert.equal(wheelForRound(0), ROUND_WHEELS[0]);
   assert.equal(wheelForRound(9), ROUND_WHEELS.at(-1));
   assert.equal(wheelForRound('2'), ROUND_WHEELS[1]);
+});
+
+test('round multipliers raise cash wedge values in the later rounds', () => {
+  assert.deepEqual([...ROUND_MULTIPLIERS], [1, 1, 1.5, 2]);
+  assert.equal(ROUND_MULTIPLIERS.length, FINAL_ROUND);
+  assert.equal(multiplierLabel(3), '1.5x');
+  assert.equal(multiplierLabel(FINAL_ROUND), '2x');
+  assert.equal(roundMultiplier(0), 1);
+  assert.equal(roundMultiplier('3'), 1.5);
+  assert.equal(roundMultiplier(9), 2);
+  for (let round = 1; round <= FINAL_ROUND; round++) {
+    const wheel = wheelForRound(round);
+    const index = wheel.findIndex((segment) => segment.type === 'cash');
+    const game = gameWith();
+    game.round = round;
+    spinWheel(game, () => (index + 0.5) / wheel.length);
+    assert.equal(game.pendingValue, wheel[index].value * roundMultiplier(round));
+    assert.ok(Number.isInteger(game.pendingValue));
+  }
+});
+
+test('the round-end summary reports the round winnings and the new total', () => {
+  const game = gameWith();
+  game.players[0].round = 3200;
+  game.players[0].total = 1500;
+  finishRound(game);
+  assert.equal(game.roundWinnings, 3200);
+  assert.equal(game.players[0].total, 4700);
+  assert.match(game.message, /wins \$3,200 this round, for a new total of \$4,700/);
+  nextRound(game, fixed);
+  assert.equal(game.roundWinnings, 0);
 });
 
 test('trip, mystery, and bonus prize catalogs are usable, varied, and positive', () => {
@@ -220,7 +252,7 @@ for (const round of [2, 3]) {
       assert.deepEqual(effective[index], {
         label: String(segment.value), type: 'cash', value: segment.value,
       });
-      assert.equal(game.players[1].round, segment.value * 2 * (round === FINAL_ROUND ? 2 : 1));
+      assert.equal(game.players[1].round, segment.value * 2 * roundMultiplier(round));
       assert.deepEqual(wheelForRound(round), base);
       effective.forEach((wedge, wedgeIndex) => {
         if (wedgeIndex !== index) assert.deepEqual(wedge, base[wedgeIndex]);
@@ -230,7 +262,7 @@ for (const round of [2, 3]) {
       spinWheel(game, sequence(draw));
       assert.equal(game.lastSpin.type, 'cash');
       assert.equal(game.lastSpin.value, segment.value);
-      assert.equal(game.pendingValue, segment.value * (round === FINAL_ROUND ? 2 : 1));
+      assert.equal(game.pendingValue, segment.value * roundMultiplier(round));
       assert.equal(game.pendingPrize, null);
       guessLetter(game, 'D');
       assert.deepEqual(game.players[1].prizes, heldPrize);
@@ -572,7 +604,7 @@ test('every segment can be selected and lastSpin retains its base wheel value', 
       const expected = { index, ...wheel[index] };
       if (['trip', 'mystery'].includes(wheel[index].type)) expected.prize = { ...game.lastSpin.prize };
       assert.deepEqual(game.lastSpin, expected);
-      assert.equal(game.pendingValue, wheel[index].value * (round === FINAL_ROUND ? 2 : 1));
+      assert.equal(game.pendingValue, wheel[index].value * roundMultiplier(round));
     }
   }
 });
@@ -763,6 +795,8 @@ for (const action of ['spin', 'consonant']) {
     assert.equal(game.players[0].total, 2500);
     assert.equal(game.players[1].total, 2000);
     assert.equal(game.roundWinner, 0);
+    assert.equal(game.roundWinnings, 1800);
+    assert.match(game.message, /wins \$1,800 this round, for a new total of \$2,500/);
     assert.equal(game.phase, 'round-end');
     assert.equal(game.pendingValue, 0);
     assert.equal(isLetterRevealed(game, 'Z'), true);
@@ -799,7 +833,7 @@ for (const count of [2, 3]) {
       assert.deepEqual(game.players.map((p) => p.round), Array(count).fill(0));
       assert.deepEqual(game.players.map((p) => p.total), totals);
     }
-    assert.match(game.message, /double/i);
+    assert.match(game.message, new RegExp(`${multiplierLabel(FINAL_ROUND)} wheel values`, 'i'));
   });
 }
 

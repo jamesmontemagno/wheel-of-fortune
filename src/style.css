@@ -209,6 +209,9 @@ h1, h2, h3, .brand { font-family: 'Outfit', sans-serif; }
 .celebration-card p, .bonus-card p, .final-card p { font-size: 12px; line-height: 1.8; color: #737d64; }
 .prize-amount { font-family: 'Outfit', sans-serif; font-size: 36px; margin: 24px 0; }
 .prize-amount > span { display: block; font: 700 8px 'DM Sans', sans-serif; letter-spacing: 1.5px; margin-top: 5px; color: #8a8f76; }
+.celebration-card .prize-amount { margin-bottom: 12px; }
+.round-total { font-family: 'Outfit', sans-serif; font-size: 22px; margin: 0 0 24px; color: #3d5548; }
+.round-total > span { display: block; font: 700 8px 'DM Sans', sans-serif; letter-spacing: 1.5px; margin-top: 5px; color: #8a8f76; }
 .bonus-clock { display: flex; align-items: center; justify-content: center; gap: 13px; margin: 16px 0; }
 .bonus-clock > span { font-family: 'Outfit', sans-serif; font-size: 45px; font-variant-numeric: tabular-nums; }
 .bonus-clock > small { font-size: 8px; letter-spacing: 1px; }

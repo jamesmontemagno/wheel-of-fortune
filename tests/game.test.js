@@ -6,6 +6,7 @@ import {
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick, revealBonusPrize,
   isLetterRevealed, isBonusPuzzleEligible, normalizeAnswer, usablePuzzleHistory, PUZZLES_PER_GAME, BONUS_PICK_SECONDS,
   BONUS_SECONDS, FINAL_ROUND, bonusLettersRemaining, chooseBonusCategory, startBonusSolve,
+  ROUND_MULTIPLIERS, roundMultiplier, multiplierLabel, BANKRUPT_LIMITS, bankruptLimit, bankruptsRemaining,
   BONUS_CATEGORY_CHOICES, BONUS_COUNTDOWN_SECONDS, bonusCategoryChoices,
 } from '../src/game.js';
 import { PUZZLES } from '../src/puzzles.js';
@@ -15,6 +16,16 @@ const gameWith = (phrase = 'BANANA BREAD', names = ['Ada', 'Bo']) => {
   const game = createGame(names, fixed);
   game.puzzle = { ...game.puzzle, phrase };
   return game;
+};
+// Bankrupt wedges are skipped after one lands or once the round limit is reached,
+// so a targeted spin has to be drawn against the segments that are still eligible.
+const drawWithoutBankrupt = (game, index) => {
+  const eligible = wheelForGame(game)
+    .map((segment, position) => ({ segment, position }))
+    .filter(({ segment }) => segment.type !== 'bankrupt');
+  const slot = eligible.findIndex((entry) => entry.position === index);
+  assert.ok(slot >= 0, 'That wedge cannot be reached right now');
+  return (slot + 0.5) / eligible.length;
 };
 const spin = (game, type = 'cash') => {
   const wheel = wheelForGame(game);
@@ -100,7 +111,7 @@ test('round wheels grow each round, keep hazards, and add trip and mystery surpr
     assert.equal(wheel, ROUND_WHEELS[round - 1]);
     if (round > 1) assert.ok(wheel.length > wheelForRound(round - 1).length);
     assert.equal(wheel.filter((s) => s.type === 'lose-turn').length, 1);
-    assert.ok([1, 2].includes(wheel.filter((s) => s.type === 'bankrupt').length));
+    assert.equal(wheel.filter((s) => s.type === 'bankrupt').length, round <= 2 ? 1 : 2);
     assert.equal(wheel.filter((s) => s.type === 'trip').length, round === 1 ? 0 : 1);
     assert.equal(wheel.filter((s) => s.type === 'mystery').length, round === 1 ? 0 : 1);
     const cash = wheel.filter((s) => s.type === 'cash').map((s) => s.value);
@@ -115,6 +126,81 @@ test('round wheels grow each round, keep hazards, and add trip and mystery surpr
   assert.equal(wheelForRound(0), ROUND_WHEELS[0]);
   assert.equal(wheelForRound(9), ROUND_WHEELS.at(-1));
   assert.equal(wheelForRound('2'), ROUND_WHEELS[1]);
+});
+
+test('round multipliers raise cash wedge values in the later rounds', () => {
+  assert.deepEqual([...ROUND_MULTIPLIERS], [1, 1, 1.5, 2]);
+  assert.equal(ROUND_MULTIPLIERS.length, FINAL_ROUND);
+  assert.equal(multiplierLabel(3), '1.5x');
+  assert.equal(multiplierLabel(FINAL_ROUND), '2x');
+  assert.equal(roundMultiplier(0), 1);
+  assert.equal(roundMultiplier('3'), 1.5);
+  assert.equal(roundMultiplier(9), 2);
+  for (let round = 1; round <= FINAL_ROUND; round++) {
+    const wheel = wheelForRound(round);
+    const index = wheel.findIndex((segment) => segment.type === 'cash');
+    const game = gameWith();
+    game.round = round;
+    spinWheel(game, () => (index + 0.5) / wheel.length);
+    assert.equal(game.pendingValue, wheel[index].value * roundMultiplier(round));
+    assert.ok(Number.isInteger(game.pendingValue));
+  }
+});
+
+test('bankrupt landings are capped per round while the wedges stay on the board', () => {
+  assert.deepEqual([...BANKRUPT_LIMITS], [1, 2, 3, 4]);
+  assert.equal(BANKRUPT_LIMITS.length, FINAL_ROUND);
+  assert.equal(bankruptLimit(0), 1);
+  assert.equal(bankruptLimit('3'), 3);
+  assert.equal(bankruptLimit(9), 4);
+  for (let round = 1; round <= FINAL_ROUND; round++) {
+    const limit = bankruptLimit(round);
+    const game = gameWith();
+    game.round = round;
+    assert.equal(game.bankruptsHit, 0);
+    assert.equal(bankruptsRemaining(game), limit);
+    for (let hit = 1; hit <= limit; hit++) {
+      spin(game, 'bankrupt');
+      assert.equal(game.lastSpin.type, 'bankrupt');
+      assert.equal(game.bankruptsHit, hit);
+      assert.equal(bankruptsRemaining(game), limit - hit);
+      // A Bankrupt never lands twice in a row, so a safe spin comes between attempts.
+      spin(game, 'cash');
+      expireTurn(game);
+    }
+    // The wedges are still on the wheel, but no spin can stop on one again.
+    const wheel = wheelForGame(game);
+    assert.equal(wheel.filter((segment) => segment.type === 'bankrupt').length, round <= 2 ? 1 : 2);
+    for (let index = 0; index < wheel.length; index++) {
+      spinWheel(game, () => (index + 0.5) / wheel.length);
+      assert.notEqual(game.lastSpin.type, 'bankrupt');
+      assert.equal(game.bankruptsHit, limit);
+      if (game.action === 'consonant') expireTurn(game);
+    }
+  }
+});
+
+test('a new round restores the full bankrupt allowance', () => {
+  const game = gameWith();
+  spin(game, 'bankrupt');
+  assert.equal(game.bankruptsHit, 1);
+  assert.equal(bankruptsRemaining(game), 0);
+  finishRound(game);
+  nextRound(game, fixed);
+  assert.equal(game.bankruptsHit, 0);
+  assert.equal(bankruptsRemaining(game), bankruptLimit(game.round));
+});
+
+test('the round-end summary reports the round winnings and the new total', () => {
+  const game = gameWith();
+  game.players[0].round = 3200;
+  game.players[0].total = 1500;
+  finishRound(game);
+  assert.equal(game.roundWinnings, 3200);
+  assert.equal(game.players[0].total, 4700);
+  assert.match(game.message, /wins \$3,200 this round, for a new total of \$4,700/);
+  nextRound(game, fixed);
+  assert.equal(game.roundWinnings, 0);
 });
 
 test('trip, mystery, and bonus prize catalogs are usable, varied, and positive', () => {
@@ -220,7 +306,7 @@ for (const round of [2, 3]) {
       assert.deepEqual(effective[index], {
         label: String(segment.value), type: 'cash', value: segment.value,
       });
-      assert.equal(game.players[1].round, segment.value * 2 * (round === FINAL_ROUND ? 2 : 1));
+      assert.equal(game.players[1].round, segment.value * 2 * roundMultiplier(round));
       assert.deepEqual(wheelForRound(round), base);
       effective.forEach((wedge, wedgeIndex) => {
         if (wedgeIndex !== index) assert.deepEqual(wedge, base[wedgeIndex]);
@@ -230,7 +316,7 @@ for (const round of [2, 3]) {
       spinWheel(game, sequence(draw));
       assert.equal(game.lastSpin.type, 'cash');
       assert.equal(game.lastSpin.value, segment.value);
-      assert.equal(game.pendingValue, segment.value * (round === FINAL_ROUND ? 2 : 1));
+      assert.equal(game.pendingValue, segment.value * roundMultiplier(round));
       assert.equal(game.pendingPrize, null);
       guessLetter(game, 'D');
       assert.deepEqual(game.players[1].prizes, heldPrize);
@@ -240,7 +326,7 @@ for (const round of [2, 3]) {
       assert.equal(game.players[1].round, 0);
       assert.deepEqual(game.claimedPrizeIndices, [index]);
       assert.equal(wheelForGame(game)[index].type, 'cash');
-      spinWheel(game, sequence(draw));
+      spinWheel(game, sequence(drawWithoutBankrupt(game, index)));
       assert.equal(game.pendingPrize, null);
       assert.equal(game.lastSpin.type, 'cash');
 
@@ -572,7 +658,7 @@ test('every segment can be selected and lastSpin retains its base wheel value', 
       const expected = { index, ...wheel[index] };
       if (['trip', 'mystery'].includes(wheel[index].type)) expected.prize = { ...game.lastSpin.prize };
       assert.deepEqual(game.lastSpin, expected);
-      assert.equal(game.pendingValue, wheel[index].value * (round === FINAL_ROUND ? 2 : 1));
+      assert.equal(game.pendingValue, wheel[index].value * roundMultiplier(round));
     }
   }
 });
@@ -763,6 +849,8 @@ for (const action of ['spin', 'consonant']) {
     assert.equal(game.players[0].total, 2500);
     assert.equal(game.players[1].total, 2000);
     assert.equal(game.roundWinner, 0);
+    assert.equal(game.roundWinnings, 1800);
+    assert.match(game.message, /wins \$1,800 this round, for a new total of \$2,500/);
     assert.equal(game.phase, 'round-end');
     assert.equal(game.pendingValue, 0);
     assert.equal(isLetterRevealed(game, 'Z'), true);
@@ -799,7 +887,7 @@ for (const count of [2, 3]) {
       assert.deepEqual(game.players.map((p) => p.round), Array(count).fill(0));
       assert.deepEqual(game.players.map((p) => p.total), totals);
     }
-    assert.match(game.message, /double/i);
+    assert.match(game.message, new RegExp(`${multiplierLabel(FINAL_ROUND)} wheel values`, 'i'));
   });
 }
 
@@ -1094,13 +1182,13 @@ test('bankrupt never lands twice in a row', () => {
       assert.notEqual(next.lastSpin.type, 'bankrupt');
       assert.deepEqual(wheelForGame(game)[next.lastSpin.index].type, next.lastSpin.type);
     }
-    // Once a safe wedge lands, bankrupt is back in play.
+    // Once a safe wedge lands, bankrupt is back in play while the round allows more landings.
     spin(game, 'cash');
     const after = structuredClone(game);
     const bankruptIndex = wheelForGame(after).findIndex((segment) => segment.type === 'bankrupt');
     after.action = 'spin';
     spinWheel(after, () => (bankruptIndex + 0.5) / wheelForGame(after).length);
-    assert.equal(after.lastSpin.type, 'bankrupt');
+    assert.equal(after.lastSpin.type, bankruptLimit(round) > 1 ? 'bankrupt' : 'cash');
   }
 });
 

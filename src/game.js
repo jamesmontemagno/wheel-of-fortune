@@ -49,7 +49,7 @@ export const ROUND_WHEELS = Object.freeze([
     { label: '800', type: 'cash', value: 800 },
     { label: '1,000', type: 'cash', value: 1000 },
     { label: '700', type: 'cash', value: 700 },
-    { label: 'BANKRUPT', type: 'bankrupt', value: 0 },
+    { label: '1,100', type: 'cash', value: 1100 },
     { label: '850', type: 'cash', value: 850 },
     { label: '1,200', type: 'cash', value: 1200 },
   ]),
@@ -95,6 +95,31 @@ export const ROUND_WHEELS = Object.freeze([
 
 // The last main round before the bonus round.
 export const FINAL_ROUND = ROUND_WHEELS.length;
+
+// Later rounds pay more for the same wedge: round three is worth 1.5x and round four doubles.
+export const ROUND_MULTIPLIERS = Object.freeze([1, 1, 1.5, 2]);
+
+export function roundMultiplier(round) {
+  const index = Math.min(Math.max(Math.trunc(Number(round) || 1), 1), ROUND_MULTIPLIERS.length) - 1;
+  return ROUND_MULTIPLIERS[index];
+}
+
+// How a multiplied round is announced on screen, e.g. "1.5x" or "2x".
+export const multiplierLabel = (round) => `${roundMultiplier(round)}x`;
+
+// Bankrupt wedges stay on the board all round, but they can only be landed on this many times.
+export const BANKRUPT_LIMITS = Object.freeze([1, 2, 3, 4]);
+
+export function bankruptLimit(round) {
+  const index = Math.min(Math.max(Math.trunc(Number(round) || 1), 1), BANKRUPT_LIMITS.length) - 1;
+  return BANKRUPT_LIMITS[index];
+}
+
+// How many Bankrupt landings the round still allows.
+export function bankruptsRemaining(game) {
+  const used = Number.isFinite(game?.bankruptsHit) ? game.bankruptsHit : 0;
+  return Math.max(0, bankruptLimit(game?.round) - used);
+}
 
 // Kept for the lobby preview and as the opening-round wheel.
 export const WHEEL_SEGMENTS = ROUND_WHEELS[0];
@@ -339,6 +364,8 @@ export function createGame(names, rng = Math.random, seenPuzzleIds = []) {
     pendingPrize: null,
     claimedPrizeIndices: [],
     roundPrizes: [],
+    roundWinnings: 0,
+    bankruptsHit: 0,
     turnSerial: 1,
     turnSeconds: TURN_SECONDS,
     bonusSeconds: BONUS_SECONDS,
@@ -357,8 +384,9 @@ export function spinWheel(game, rng = Math.random) {
   requireMainAction(game);
   requireCondition(game.action === 'spin', 'Choose a consonant before spinning again.');
   const wheel = wheelForGame(game);
-  // Two Bankrupts in a row is no fun, so that wedge is skipped right after one lands.
-  const blockBankrupt = game.lastSpin?.type === 'bankrupt';
+  // Two Bankrupts in a row is no fun, and each round only allows so many Bankrupt landings.
+  // The wedges stay on the board either way; the spin simply cannot stop on them.
+  const blockBankrupt = game.lastSpin?.type === 'bankrupt' || bankruptsRemaining(game) === 0;
   const eligible = wheel
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => !(blockBankrupt && segment.type === 'bankrupt'));
@@ -366,7 +394,7 @@ export function spinWheel(game, rng = Math.random) {
   game.lastSpin = { index, ...segment };
   game.pendingPrize = null;
   if (segment.type === 'cash' || isPrizeWedge(segment)) {
-    game.pendingValue = segment.value * (game.round === FINAL_ROUND ? 2 : 1);
+    game.pendingValue = Math.round(segment.value * roundMultiplier(game.round));
     game.action = 'consonant';
     startClock(game);
     if (isPrizeWedge(segment)) {
@@ -383,7 +411,9 @@ export function spinWheel(game, rng = Math.random) {
       const lostPrizes = player.prizes.length;
       player.round = 0;
       player.prizes = [];
-      game.message = `Bankrupt! Your round winnings${lostPrizes > 0 ? ' and prizes are' : ' are'} cleared; your banked total is safe.`;
+      game.bankruptsHit += 1;
+      const left = bankruptsRemaining(game);
+      game.message = `Bankrupt! Your round winnings${lostPrizes > 0 ? ' and prizes are' : ' are'} cleared; your banked total is safe. ${left === 0 ? 'Bankrupt is done for this round.' : `Bankrupt can land ${left} more time${left === 1 ? '' : 's'} this round.`}`;
     } else {
       game.message = 'Lose a turn! Your winnings are safe.';
     }
@@ -446,14 +476,16 @@ export function solvePuzzle(game, answer) {
   const prize = Math.max(player.round, 1000);
   const prizes = player.prizes.map((held) => ({ ...held }));
   const prizeValue = prizes.reduce((total, held) => total + held.value, 0);
-  player.total += prize + prizeValue;
+  const roundWinnings = prize + prizeValue;
+  player.total += roundWinnings;
   game.roundWinner = game.activePlayer;
+  game.roundWinnings = roundWinnings;
   game.roundPrizes = prizes;
   game.phase = 'round-end';
   game.action = 'spin';
   game.pendingValue = 0;
   game.pendingPrize = null;
-  game.message = `${player.name} solved it and banks $${(prize + prizeValue).toLocaleString('en-US')}!${prizes.length > 0 ? ` Prizes won: ${prizes.map((held) => held.label).join(', ')}.` : ''}`;
+  game.message = `${player.name} solved it and wins $${roundWinnings.toLocaleString('en-US')}${prizes.length > 0 ? ' in cash and prizes' : ''} this round, for a new total of $${player.total.toLocaleString('en-US')}!${prizes.length > 0 ? ` Prizes won: ${prizes.map((held) => held.label).join(', ')}.` : ''}`;
   return game;
 }
 
@@ -482,6 +514,8 @@ export function nextRound(game, rng = Math.random) {
   game.lastSpin = null;
   game.roundWinner = null;
   game.roundPrizes = [];
+  game.roundWinnings = 0;
+  game.bankruptsHit = 0;
   game.claimedPrizeIndices = [];
   startClock(game);
   if (game.round < FINAL_ROUND) {
@@ -493,7 +527,7 @@ export function nextRound(game, rng = Math.random) {
       (_, offset) => (rotationStart + offset) % game.players.length,
     ).find((index) => game.players[index].total === lowest);
     game.phase = 'playing';
-    game.message = `Round ${game.round}${game.round === FINAL_ROUND ? ': double wheel values' : ''}! A bigger wheel with ${wheelForRound(game.round).length} spaces is in play. ${game.players[game.activePlayer].name}, you start.`;
+    game.message = `Round ${game.round}${roundMultiplier(game.round) > 1 ? `: ${multiplierLabel(game.round)} wheel values` : ''}! A bigger wheel with ${wheelForRound(game.round).length} spaces is in play. ${game.players[game.activePlayer].name}, you start.`;
   } else {
     game.champion = champion;
     game.activePlayer = champion;

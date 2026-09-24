@@ -2,6 +2,7 @@ import './style.css'
 import {
   WHEEL_SEGMENTS, BONUS_WHEEL, BONUS_GIVEN_LETTERS, VOWELS, TURN_SECONDS, BONUS_SECONDS, wheelForGame,
   BONUS_PICK_SECONDS, BONUS_COUNTDOWN_SECONDS, FINAL_ROUND, bonusLettersRemaining,
+  roundMultiplier, multiplierLabel, bankruptLimit, bankruptsRemaining,
   createGame, spinWheel, guessLetter, solvePuzzle, expireTurn, usablePuzzleHistory,
   nextRound, spinBonusWheel, chooseBonusLetter, solveBonus, expireBonus, expireBonusPick,
   isLetterRevealed, revealBonusPrize, chooseBonusCategory, startBonusSolve,
@@ -346,6 +347,7 @@ function keyboardMarkup() {
 }
 
 function playingControls() {
+  const bankruptsLeft = bankruptsRemaining(game)
   const canBuy = game.action === 'spin' && game.players[game.activePlayer].round >= 250 && [...VOWELS].some((l) => !game.usedLetters.includes(l))
   return `<section class="wheel-panel ${spinning ? 'spinning' : ''}" aria-label="Spin and actions">
     <div class="wheel-panel-heading"><span class="card-eyebrow">A LITTLE LUCK GOES A LONG WAY</span><span aria-hidden="true">✧</span></div>
@@ -353,7 +355,7 @@ function playingControls() {
     <div class="wheel-result">${spinning ? 'Round and round we go…' : game.pendingPrize ? `<strong>${escape(game.pendingPrize.label)}</strong>` : game.action === 'consonant' ? `<strong>${money(game.pendingValue)}</strong> per consonant` : game.lastSpin ? escape(game.lastSpin.label) : 'Your wisdom is one spin away.'}</div>
     <button class="button button-primary" id="spin" ${spinning || game.action !== 'spin' || vowelMode ? 'disabled' : ''}>${icon('spin')} ${spinning ? 'Spinning…' : 'Spin the wheel'}</button>
     <div class="secondary-actions"><button class="button button-secondary" id="buy-vowel" ${spinning || !canBuy ? 'disabled' : ''}>${vowelMode ? 'Cancel' : 'Buy a vowel'} <span>${vowelMode ? '' : '$250'}</span></button><button class="button button-secondary" id="solve" ${spinning ? 'disabled' : ''}>Solve it ${icon('arrow')}</button></div>
-    <p class="wheel-note">${game.round === FINAL_ROUND ? '<strong class="double-stakes-note">DOUBLE STAKES · ALL CASH WEDGES PAY 2×</strong>' : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip' || segment.type === 'mystery') ? ' · trip &amp; mystery surprises in play' : ''}</p>
+    <p class="wheel-note">${roundMultiplier(game.round) > 1 ? `<strong class="double-stakes-note">RAISED STAKES · ALL CASH WEDGES PAY ${multiplierLabel(game.round).toUpperCase()}</strong>` : 'Watch out for Bankrupt &amp; Lose a Turn.'}<br>${activeWheel().length} spaces this round${activeWheel().some((segment) => segment.type === 'trip' || segment.type === 'mystery') ? ' · trip &amp; mystery surprises in play' : ''}<br>${bankruptsLeft === 0 ? 'Bankrupt is spent for this round' : `Bankrupt can land ${bankruptsLeft} more time${bankruptsLeft === 1 ? '' : 's'} this round`} (max ${bankruptLimit(game.round)})</p>
   </section>`
 }
 
@@ -362,7 +364,7 @@ const confettiMarkup = () => `<div class="confetti" aria-hidden="true">${Array.f
 
 function endRoundMarkup() {
   const player = game.players[game.roundWinner]
-  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(player.total)}<span>TOTAL BANKED</span></div>${game.roundPrizes.length > 0 ? `<div class="prize-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
+  return `<section class="celebration-card celebrating">${confettiMarkup()}<span class="celebration-icon" aria-hidden="true">✦</span><span class="card-eyebrow">NOW THAT’S A GOOD GUESS</span><h2>${escape(player.name)}<br>nailed it.</h2><p>The puzzle is solved and the winnings are safe.</p><div class="prize-amount">${money(game.roundWinnings)}<span>${game.roundPrizes.length > 0 ? 'CASH &amp; PRIZES THIS ROUND' : 'WON THIS ROUND'}</span></div><div class="round-total">${money(player.total)}<span>NEW TOTAL</span></div>${game.roundPrizes.length > 0 ? `<div class="prize-list">${game.roundPrizes.map((prize) => `<div>${icon(prizeIcon(prize))}<span><strong>${escape(prize.label)}</strong><small>${escape(prize.note)}</small></span><b>${money(prize.value)}</b></div>`).join('')}</div>` : ''}<button class="button button-primary" id="next-round">${game.round === FINAL_ROUND ? 'On to the bonus round' : `Let’s play round ${game.round + 1}`} ${icon('arrow')}</button></section>`
 }
 
 function bonusMarkup() {
@@ -416,8 +418,8 @@ function renderGame() {
   }
   const bonus = BONUS_PHASES.includes(game.phase)
   shell(`<section class="game-shell">
-    <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / ${FINAL_ROUND}</span>${game.round === FINAL_ROUND ? '<span class="double-badge">DOUBLE STAKES</span>' : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of ${FINAL_ROUND}`}">${Array.from({ length: FINAL_ROUND }, (_, i) => i + 1).map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
-    ${!bonus && game.round === FINAL_ROUND ? '<div class="double-stakes-banner" role="status"><strong>DOUBLE STAKES</strong><span>Every cash wedge pays 2× this round.</span></div>' : ''}
+    <div class="game-topline"><div><span class="eyebrow">${bonus ? 'THE GRAND FINALE' : 'LET THE GOOD TIMES SPIN'}</span><h1>${game.phase === 'game-over' ? 'A game well played.' : bonus ? 'A little extra wisdom.' : `Round ${game.round}<span class="round-of"> / ${FINAL_ROUND}</span>${roundMultiplier(game.round) > 1 ? `<span class="double-badge">${multiplierLabel(game.round).toUpperCase()} STAKES</span>` : ''}`}</h1></div><div class="round-progress" aria-label="${bonus ? 'Bonus round' : `Round ${game.round} of ${FINAL_ROUND}`}">${Array.from({ length: FINAL_ROUND }, (_, i) => i + 1).map((r) => `<span class="${game.round >= r ? 'complete' : ''}">${r}</span>`).join('')}<span class="${bonus ? 'complete' : ''}">✦</span></div></div>
+    ${!bonus && roundMultiplier(game.round) > 1 ? `<div class="double-stakes-banner" role="status"><strong>${multiplierLabel(game.round).toUpperCase()} STAKES</strong><span>Every cash wedge pays ${multiplierLabel(game.round)} this round.</span></div>` : ''}
     ${playerMarkup()}
     ${turnBannerMarkup()}
     <div class="turn-message" role="status" aria-live="polite"><span class="status-spark" aria-hidden="true">✳</span><span>${spinning ? 'A little suspense is part of the fun. Hold tight…' : escape(game.message)}</span></div>
@@ -720,7 +722,8 @@ function showHelp() {
     <li><strong>Vowels are $250.</strong> Buy one before spinning if you have enough round cash. They don’t earn cash, and a miss still costs a turn.</li>
     <li><strong>Watch those tricky wedges.</strong> Round one has a single Bankrupt, and Bankrupt never lands twice in a row. Bankrupt wipes your current round cash and any held prizes. Lose a Turn leaves your money alone. Both pass the turn.</li>
     <li><strong>Chase the surprises.</strong> The wheel grows each round, and from round two it carries one Trip wedge and one Mystery wedge. Trip reveals a surprise getaway; Mystery reveals a fun prize for your home or hobby, worth up to $5,000. Claim either with a matching consonant and solve that round to bank it. Once claimed, that wedge becomes cash for the rest of the round, even if the prize is later lost.</li>
-    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum, plus any prizes they claimed. A wrong solve passes the turn. The final round doubles cash wedges. The lowest banked score starts each new round; ties follow the rotating player order.</li>
+    <li><strong>Bankrupt has a limit.</strong> Bankrupt wedges stay on the wheel all round, but a round only allows so many Bankrupt landings: one in round one, two in round two, three in round three, and four in round four. Once the limit is reached the spin skips those wedges, and Bankrupt never lands twice in a row.</li>
+    <li><strong>Solve it to bank it.</strong> Only the solver keeps their round winnings, with a $1,000 minimum, plus any prizes they claimed. A wrong solve passes the turn. The round-end card shows the round winnings and the new total. Round three pays 1.5× on cash wedges and round four doubles them. The lowest banked score starts each new round; ties follow the rotating player order.</li>
     <li><strong>Finish with a flourish.</strong> After ${FINAL_ROUND} rounds, the highest banked score enters the bonus round. Ties use a random draw. Spin for a hidden envelope: cash, a car, a dream trip, a home upgrade, a tech setup, or a once-in-a-lifetime experience. Then choose your puzzle from three categories. The bonus puzzle is chosen so no more than 30% of its letter tiles are in R S T L N E. R S T L N E appear on the board right away; pick 3 more consonants and a vowel within ${BONUS_PICK_SECONDS} seconds, and if that clock runs out you play the letters you have. Your letters fill in together, a ${BONUS_COUNTDOWN_SECONDS}-second countdown gets you ready, and then you have ${BONUS_SECONDS} seconds and unlimited guesses. A correct answer wins the prize; if time runs out, the bonus round is not won and you can click the envelope to reveal its prize.</li>
     <li><strong>Keep the memories.</strong> Names and completed game scores save on this device. Visit History for past games and total scores by name. Unfinished games are not saved.</li>
   </ol><p class="fair-play-note">Friendly house rules, original puzzles, pretend money. An independent fan-made game, not affiliated with the television show.</p><button class="button button-primary" data-close>Sounds like game night ${icon('arrow')}</button>`)

@@ -263,23 +263,23 @@ test('turn expiry is rejected outside an active main-round turn', () => {
 
 for (const wedge of ['trip', 'mystery']) {
   test(`a ${wedge} wedge is claimed with a matching consonant and banked by the solver`, () => {
-  const game = gameWith('BANANA BREAD');
-  game.round = 2;
-  spin(game, wedge);
-  assert.equal(game.action, 'consonant');
-  assert.ok(game.pendingPrize);
-  assert.deepEqual(game.lastSpin.prize, game.pendingPrize);
-  const prize = { ...game.pendingPrize };
-  assert.equal(prize.kind, wedge);
-  const catalog = wedge === 'trip' ? TRIP_PRIZES : MYSTERY_PRIZES;
-  assert.ok(catalog.some((entry) => entry.id === prize.id && entry.value === prize.value));
-  guessLetter(game, 'B');
-  assert.equal(game.pendingPrize, null);
-  assert.deepEqual(game.players[0].prizes, [prize]);
-  const cash = game.players[0].round;
-  finishRound(game);
-  assert.equal(game.players[0].total, cash + prize.value);
-  assert.deepEqual(game.roundPrizes, [prize]);
+    const game = gameWith('BANANA BREAD');
+    game.round = 2;
+    spin(game, wedge);
+    assert.equal(game.action, 'consonant');
+    assert.ok(game.pendingPrize);
+    assert.deepEqual(game.lastSpin.prize, game.pendingPrize);
+    const prize = { ...game.pendingPrize };
+    assert.equal(prize.kind, wedge);
+    const catalog = wedge === 'trip' ? TRIP_PRIZES : MYSTERY_PRIZES;
+    assert.ok(catalog.some((entry) => entry.id === prize.id && entry.value === prize.value));
+    guessLetter(game, 'B');
+    assert.equal(game.pendingPrize, null);
+    assert.deepEqual(game.players[0].prizes, [prize]);
+    const cash = game.players[0].round;
+    finishRound(game);
+    assert.equal(game.players[0].total, cash + prize.value);
+    assert.deepEqual(game.roundPrizes, [prize]);
   });
 }
 

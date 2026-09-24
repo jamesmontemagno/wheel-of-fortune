@@ -155,18 +155,21 @@ jobs:
 
           # "-v" only lists identities that pass validation, which hides the imported
           # certificate when its intermediate is unavailable, so fall back to every identity.
-          identities=$(security find-identity -v -p codesigning ${keychain:+"$keychain"} || true)
-          if ! printf '%s\n' "$identities" | grep -q '"'; then
-            identities=$(security find-identity -p codesigning ${keychain:+"$keychain"} || true)
-          fi
+          for verify_flag in "-v" ""; do
+            identities=$(security find-identity $verify_flag -p codesigning ${keychain:+"$keychain"} || true)
 
-          echo "Available code signing identities:"
-          printf '%s\n' "$identities"
+            echo "Available code signing identities (find-identity $verify_flag):"
+            printf '%s\n' "$identities"
 
-          signing_identity=$(printf '%s\n' "$identities" |
-            grep -Eo '"(Apple|iPhone) Distribution: [^"]+"' |
-            head -n 1 |
-            tr -d '"')
+            signing_identity=$(printf '%s\n' "$identities" |
+              grep -Eo '"(Apple|iPhone) Distribution: [^"]+"' |
+              head -n 1 |
+              tr -d '"')
+
+            if [ -n "$signing_identity" ]; then
+              break
+            fi
+          done
 
           if [ -z "$signing_identity" ]; then
             echo "No Apple Distribution or iPhone Distribution signing identity was found in the keychain" >&2

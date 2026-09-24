@@ -40,6 +40,7 @@ jobs:
       PROJECT_PATH: mobile/WheelOfWisdom.Maui/WheelOfWisdom.Maui.csproj
       TARGET_FRAMEWORK: net10.0-ios
       RUNTIME_ID: ios-arm64
+      APP_IDENTIFIER: com.refractored.wheelofwisdom
 
     steps:
       - name: Checkout
@@ -110,14 +111,49 @@ jobs:
           echo "display-version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "app-version=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
 
+      - name: Validate iOS release secrets
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
+        env:
+          CERTIFICATE_P12: ${{ secrets.APPLE_IOS_APPSTORE_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_IOS_APPSTORE_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.APPLE_IOS_APPSTORE_PROFILE }}
+          APP_STORE_ISSUER_ID: ${{ secrets.APPLE_REFRACTORED_ISSUER_ID }}
+          APP_STORE_KEY_ID: ${{ secrets.APPLE_REFRACTORED_KEY_ID }}
+          APP_STORE_PRIVATE_KEY: ${{ secrets.APPLE_REFRACTORED_P8_KEY }}
+        run: |
+          if [ -z "$CERTIFICATE_P12" ] || [ -z "$CERTIFICATE_PASSWORD" ] || [ -z "$PROVISIONING_PROFILE" ]; then
+            echo "The iOS distribution certificate, password, and provisioning profile secrets are required" >&2
+            exit 1
+          fi
+
+          if [ "${{ inputs.upload_testflight }}" = "true" ] && { [ -z "$APP_STORE_ISSUER_ID" ] || [ -z "$APP_STORE_KEY_ID" ] || [ -z "$APP_STORE_PRIVATE_KEY" ]; }; then
+            echo "The App Store Connect API secrets are required to upload to TestFlight" >&2
+            exit 1
+          fi
+
       - name: Import signing certificate
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
         uses: apple-actions/import-codesign-certs@v7
         with:
           create-keychain: true
-          keychain-password: ${{ secrets.APPSTORE_CERTIFICATE_P12_PASSWORD }}
-          p12-file-base64: ${{ secrets.APPSTORE_CERTIFICATE_P12 }}
-          p12-password: ${{ secrets.APPSTORE_CERTIFICATE_P12_PASSWORD }}
+          keychain-password: ${{ secrets.APPLE_IOS_APPSTORE_CERTIFICATE_PASSWORD }}
+          p12-file-base64: ${{ secrets.APPLE_IOS_APPSTORE_CERTIFICATE_P12 }}
+          p12-password: ${{ secrets.APPLE_IOS_APPSTORE_CERTIFICATE_PASSWORD }}
+
+      - name: Locate signing identity
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
+        id: signing-identity
+        run: |
+          signing_identity=$(security find-identity -v -p codesigning |
+            sed -n 's/.*"\(Apple Distribution:.*\)"/\1/p' |
+            head -n 1)
+
+          if [ -z "$signing_identity" ]; then
+            echo "The imported Apple Distribution signing identity was not found" >&2
+            exit 1
+          fi
+
+          echo "name=$signing_identity" >> "$GITHUB_OUTPUT"
 
       - name: Install provisioning profile
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
@@ -137,30 +173,33 @@ jobs:
           printf '%s' "$IOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$profile_path"
           security cms -D -i "$profile_path" > "$profile_plist"
           profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist")
+          profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile_plist")
+          profile_app_identifier=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$profile_plist")
+
+          if [[ "$profile_app_identifier" != *."${{ env.APP_IDENTIFIER }}" ]]; then
+            echo "Provisioning profile '$profile_name' is for '$profile_app_identifier', not '${{ env.APP_IDENTIFIER }}'" >&2
+            exit 1
+          fi
 
           mkdir -p "$profiles_directory"
           cp "$profile_path" "$profiles_directory/$profile_uuid.mobileprovision"
           echo "uuid=$profile_uuid" >> "$GITHUB_OUTPUT"
+          echo "name=$profile_name" >> "$GITHUB_OUTPUT"
 
       - name: Publish signed iOS archive
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
-        env:
-          CODESIGN_KEY: ${{ secrets.APPSTORE_CODESIGN_KEY }}
         run: |
-          if [ -z "$CODESIGN_KEY" ]; then
-            echo "APPSTORE_CODESIGN_KEY secret is required for a release build" >&2
-            exit 1
-          fi
-
           dotnet publish "${{ env.PROJECT_PATH }}" \
             -c Release \
             -f "${{ env.TARGET_FRAMEWORK }}" \
             -p:ArchiveOnBuild=true \
+            -p:BuildIpa=true \
             -p:RuntimeIdentifier="${{ env.RUNTIME_ID }}" \
+            -p:ApplicationId="${{ env.APP_IDENTIFIER }}" \
             -p:ApplicationDisplayVersion="${{ steps.version.outputs.display-version }}" \
             -p:ApplicationVersion="${{ steps.version.outputs.app-version }}" \
-            -p:CodesignKey="$CODESIGN_KEY" \
-            -p:CodesignProvision="${{ steps.provisioning-profile.outputs.uuid }}"
+            -p:CodesignKey="${{ steps.signing-identity.outputs.name }}" \
+            -p:CodesignProvision="${{ steps.provisioning-profile.outputs.name }}"
 
       - name: Locate iOS archive
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_release }}
